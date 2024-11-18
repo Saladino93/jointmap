@@ -5,6 +5,14 @@
     e.g. python ./param_joint.py -itmax 0 -v '' 
 
 
+Testing with CMB lensing only reconstruction
+
+srun python ./param_joint.py -k p_p -itmax 1 -v 'cmblensing_only' -cmb_version cmblensing_only -no_curl -no_birefringence
+
+Testing with CMB lensing only reconstruction, new module
+
+srun python ./param_joint.py -k p_p -itmax 1 -v 'cmblensing_only_joint' -joint_module -cmb_version cmblensing_only -no_curl -no_birefringence
+
 """
 import os
 from os.path import join as opj
@@ -28,11 +36,7 @@ from lenspyx import cachers
 from delensalot.utility import utils_steps
 from delensalot.core.iterator import steps
 from delensalot.core import mpi
-from delensalot.core.opfilt.MAP_opfilt_iso_t import alm_filter_nlev_wl as alm_filter_nlev_wl_t
-from delensalot.core.opfilt.MAP_opfilt_iso_p import alm_filter_nlev_wl
-from delensalot.core.opfilt.MAP_opfilt_iso_tp import alm_filter_nlev_wl as alm_filter_nlev_wl_tp
 
-from delensalot.core.iterator.cs_iterator import iterator_cstmf as iterator_cstmf
 from delensalot.core.iterator.cs_iterator_multi import iterator_cstmf as iterator_cstmf_wcurl
 
 from jointmap.sims.sims_cmbs import sims_cmb_len
@@ -49,9 +53,11 @@ parser.add_argument('-imax', dest='imax', type=int, default=0, help='maximal sim
 parser.add_argument('-v', dest='v', type=str, default='', help='iterator version')
 parser.add_argument('-p', dest='plot', action='store_true', help='make some plots on the fly')
 parser.add_argument('-no_lensing', dest='no_lensing', action='store_true', help='no lensing')
+parser.add_argument('-no_curl', dest='no_curl', action='store_true', help='no curl')
 parser.add_argument('-no_birefringence', dest='no_birefringence', action='store_true', help='no birefringence')
 parser.add_argument('-ACB', help='amplitude (A_CB) in - log10', type=float, default=7)
 parser.add_argument('-cmb_version', type=str, default = "")
+parser.add_argument('-joint_module', dest='joint_module', action='store_true', help='use the new joint module')
 
 nside = 2048
 lmax_transfer = 4096
@@ -69,7 +75,19 @@ args = parser.parse_args()
 
 zero_lensing = args.no_lensing
 zero_birefringence = args.no_birefringence
+zero_curl = args.no_curl
 cmb_version = args.cmb_version
+joint_module = args.joint_module
+
+if joint_module:
+    from delensalot.core.opfilt.MAP_opfilt_iso_p_general import alm_filter_nlev_wl
+    from delensalot.core.secondaries import secondaries
+    from delensalot.core.iterator.cs_iterator_operator import iterator_cstmf as iterator_cstmf
+else:
+    from delensalot.core.opfilt.MAP_opfilt_iso_t import alm_filter_nlev_wl as alm_filter_nlev_wl_t
+    from delensalot.core.opfilt.MAP_opfilt_iso_p import alm_filter_nlev_wl
+    from delensalot.core.opfilt.MAP_opfilt_iso_tp import alm_filter_nlev_wl as alm_filter_nlev_wl_tp
+    from delensalot.core.iterator.cs_iterator import iterator_cstmf as iterator_cstmf
 
 
 suffix = cmb_version # descriptor to distinguish this parfile from others...
@@ -81,7 +99,7 @@ DATDIRwalpha = opj(os.environ['SCRATCH'],suffix, 'simswalpha')
 if not os.path.exists(DATDIR):
     os.makedirs(DATDIR)
 # harmonic space noise phas down to 4096
-noise_phas = phas.lib_phas(opj(os.environ['SCRATCH'], 'noisephas_lmax%s'%4096), 3, lmax_transfer) # T, E, and B noise phases
+noise_phas = phas.lib_phas(opj(os.environ['SCRATCH'], 'noisephas_lmax%s'%lmax_transfer), 3, lmax_transfer) # T, E, and B noise phases
 
 fields_of_interest = ['T', 'E', 'B', 'P', 'O', 'Alpha']
 cmb_phas = phas.lib_phas(opj(os.environ['SCRATCH'], 'cmbphas_lmax%s'%lmax_unl), len(fields_of_interest), lmax_unl) # unlensed T E B P O Alpha, CMB phases
@@ -126,8 +144,8 @@ def camb_clfile_gradient(fname, lmax=None):
         cls[k][ell[idc]] = cols[i + 1][idc] / w[idc]
     return cls
 
-#cls_path = opj(os.environ['HOME'], 'fgcmblensing', 'input', 'giulio')
-cls_path = opj("/Users/omard/Downloads/", 'giulio')
+cls_path = opj(os.environ['HOME'], 'fgcmblensing', 'input', 'giulio')
+#cls_path = opj("/Users/omard/Downloads/", 'giulio')
 cls_unl = utils.camb_clfile(opj(cls_path, 'lensedCMB_dmn1_lenspotentialCls.dat'))
 cls_len = utils.camb_clfile(opj(cls_path, 'lensedCMB_dmn1_lensedCls.dat'))
 cls_grad = camb_clfile_gradient(opj(cls_path, 'lensedCMB_dmn1_lensedgradCls.dat'))
@@ -195,7 +213,7 @@ cacher_walpha = cachers.cacher_npy(DATDIRwalpha)
 #cmb_len = sims_cmb_len(DATDIR, lmax_transfer, cls_unl, lib_pha = cmb_phas, epsilon=1e-7, zerolensing = zero_lensing, zerobirefringence = zero_birefringence)
 #cmb_len_wcurl = sims_cmb_len(DATDIRwcurl, lmax_transfer, cls_unl_wcurl, lib_pha = cmb_phas, epsilon=1e-7)
 
-cmb_len_walpha = sims_cmb_len(DATDIRwalpha, lmax_transfer, cls_unl_walpha, lib_pha = cmb_phas, epsilon=1e-7, zerolensing = zero_lensing, zerobirefringence = zero_birefringence)
+cmb_len_walpha = sims_cmb_len(DATDIRwalpha, lmax_transfer, cls_unl_walpha, lib_pha = cmb_phas, epsilon=1e-7, zerolensing = zero_lensing, zerobirefringence = zero_birefringence, zerocurl = zero_curl)
 
 #sims      = maps.cmb_maps_harmonicspace(cmb_len, cls_transf, cls_noise, noise_phas)
 #sims_wcurl = maps.cmb_maps_harmonicspace(cmb_len_wcurl, cls_transf, cls_noise, noise_phas)
@@ -358,10 +376,18 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     # Lensing deflection field instance (initiated here with zero deflection)
 
     ffi = deflection(lenjob_geometry, np.zeros_like(plm0), mmax_qlm, numthreads=tr, epsilon=1e-7)
+
+    LensingOp = secondaries.Lensing(name = "lensing", lmax = ffi.lmax_dlm, mmax = ffi.mmax_dlm, sht_tr = tr)
+    LensingOp.set_field(ffi)
+
     if k in ['p_p']:
-        # Here multipole cuts are set by the transfer function (those with 0 are not considered)
-        filtr = alm_filter_nlev_wl(nlev_p, ffi, transf_elm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf),
-                                    transf_b=transf_blm, nlev_b=nlev_p)
+        if param_joint:
+            filtr = alm_filter_nlev_wl(nlev_p, transf_elm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf),
+                                        transf_b=transf_blm, nlev_b=nlev_p, operators = LensingOp)
+        else:
+            # Here multipole cuts are set by the transfer function (those with 0 are not considered)
+            filtr = alm_filter_nlev_wl(nlev_p, ffi, transf_elm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf),
+                                        transf_b=transf_blm, nlev_b=nlev_p)
         # dat maps must now be given in harmonic space in this idealized configuration
         eblm = np.array(sims_MAP.get_sim_pmap(int(simidx)))
         datmaps = np.array([alm_copy(eblm[0], None, lmax_ivf, mmax_ivf), alm_copy(eblm[1], None, lmax_ivf, mmax_ivf) ])

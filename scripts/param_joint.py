@@ -13,7 +13,17 @@ Testing with CMB lensing only reconstruction, new module
 
 srun python ./param_joint.py -k p_p -itmax 1 -v 'cmblensing_only_joint' -joint_module -cmb_version cmblensing_only -no_curl -no_birefringence
 
+python ./param_joint.py -k p_p -itmax 1 -v 'cmblensing_only_joint_v2' -joint_module -cmb_version cmblensing_only -no_curl -no_birefringence
+
+
+Testing with CMB lensing only reconstruction, new module
+
+
+
+
 """
+
+
 import os
 from os.path import join as opj
 import numpy as np
@@ -28,6 +38,7 @@ from plancklens.sims.cmbs import sims_cmb_unl
 from plancklens.filt import filt_simple, filt_util
 
 from lenspyx.remapping.deflection import deflection
+from lenspyx.remapping import utils_geom as utils_scarf
 from lenspyx.remapping.utils_geom import Geom, pbdGeometry, pbounds
 from lenspyx.utils import cli
 from lenspyx.utils_hp import gauss_beam, almxfl, alm2cl, alm_copy
@@ -47,7 +58,7 @@ import argparse
 parser = argparse.ArgumentParser(description='test iterator full-sky with pert. resp.')
 parser.add_argument('-k', dest='k', type=str, default='p_p', help='rec. type')
 parser.add_argument('-itmax', dest='itmax', type=int, default=-1, help='maximal iter index')
-parser.add_argument('-tol', dest='tol', type=float, default=7., help='-log10 of cg tolerance default')
+parser.add_argument('-tol', dest='tol', type=float, default=6., help='-log10 of cg tolerance default')
 parser.add_argument('-imin', dest='imin', type=int, default=0, help='minimal sim index')
 parser.add_argument('-imax', dest='imax', type=int, default=0, help='maximal sim index')
 parser.add_argument('-v', dest='v', type=str, default='', help='iterator version')
@@ -58,20 +69,28 @@ parser.add_argument('-no_birefringence', dest='no_birefringence', action='store_
 parser.add_argument('-ACB', help='amplitude (A_CB) in - log10', type=float, default=7)
 parser.add_argument('-cmb_version', type=str, default = "")
 parser.add_argument('-joint_module', dest='joint_module', action='store_true', help='use the new joint module')
+#lmax_unl
+parser.add_argument('-lmax_unl', dest='lmax_unl', type=int, default=4096, help='lmax_unl')
+parser.add_argument('-mmax_unl', dest='mmax_unl', type=int, default=4096, help='mmax_unl')
+
+parser.add_argument('-lmax_qlm', dest='lmax_qlm', type=int, default=5120, help='lmax_qlm')
+parser.add_argument('-mmax_qlm', dest='mmax_qlm', type=int, default=5120, help='mmax_qlm')
+
+args = parser.parse_args()
+
+lmax_qlm, mmax_qlm = args.lmax_qlm, args.mmax_qlm # Lensing map is reconstructed down to this lmax and mmax
+lmax_unl, mmax_unl = args.lmax_unl, args.mmax_unl  # Delensed CMB is reconstructed down to this lmax and mmax
 
 nside = 2048
 lmax_transfer = 4096
+
+dlmax = 1024
+lmax_unl_generation = 5000
 
 lmax_ivf, mmax_ivf, beam, nlev_t, nlev_p = (4096, 4096, 1., 0.5 / np.sqrt(2), 0.5)
 lmin_tlm, lmin_elm, lmin_blm = (1, 2, 2) # The fiducial transfer functions are set to zero below these lmins
 # for delensing useful to cut much more B. It can also help since the cg inversion does not have to reconstruct those.
 
-lmax_qlm, mmax_qlm = (5120, 5120) # Lensing map is reconstructed down to this lmax and mmax
-# NB: the QEs from plancklens does not support mmax != lmax, but the MAP pipeline does
-lmax_unl, mmax_unl = (5120, 5120) # Delensed CMB is reconstructed down to this lmax and mmax
-
-
-args = parser.parse_args()
 
 zero_lensing = args.no_lensing
 zero_birefringence = args.no_birefringence
@@ -99,14 +118,19 @@ DATDIRwalpha = opj(os.environ['SCRATCH'],suffix, 'simswalpha')
 if not os.path.exists(DATDIR):
     os.makedirs(DATDIR)
 # harmonic space noise phas down to 4096
-noise_phas = phas.lib_phas(opj(os.environ['SCRATCH'], 'noisephas_lmax%s'%lmax_transfer), 3, lmax_transfer) # T, E, and B noise phases
+noise_phas = phas.lib_phas(opj(os.environ['SCRATCH'], 'noisephas_lmax%s'%(lmax_unl_generation)), 3, lmax_unl_generation) # T, E, and B noise phases
 
 fields_of_interest = ['T', 'E', 'B', 'P', 'O', 'Alpha']
-cmb_phas = phas.lib_phas(opj(os.environ['SCRATCH'], 'cmbphas_lmax%s'%lmax_unl), len(fields_of_interest), lmax_unl) # unlensed T E B P O Alpha, CMB phases
+cmb_phas = phas.lib_phas(opj(os.environ['SCRATCH'], 'cmbphas_lmax%s'%(lmax_unl_generation+dlmax)), len(fields_of_interest), lmax_unl_generation+dlmax) # unlensed T E B P O Alpha, CMB phases
 
 
 #----------------- pixelization and geometry info for the input maps and the MAP pipeline and for lensing operations
 lenjob_geometry = Geom.get_thingauss_geometry(lmax_unl * 2, 2)
+
+ninv_geom = utils_scarf.Geom.get_thingauss_geometry(lmax_qlm + 500, 2)
+lenjob_geometry = ninv_geom
+#ninv_geom = utils_scarf.Geom.get_thingauss_geometry(lmax_qlm + 100, 2)
+
 lenjob_pbgeometry = pbdGeometry(lenjob_geometry, pbounds(0., 2 * np.pi))
 Lmin = 1 # The reconstruction of all lensing multipoles below that will not be attempted
 mc_sims_mf_it0 = np.array([]) # sims to use to build the very first iteration mean-field (QE mean-field) Here 0 since idealized
@@ -115,7 +139,7 @@ mc_sims_mf_it0 = np.array([]) # sims to use to build the very first iteration me
 # Multigrid chain descriptor
 # The hard coded number nside here is irrelevant for diagonal preconditioner
 chain_descrs = lambda lmax_sol, cg_tol : [[0, ["diag_cl"], lmax_sol, nside, np.inf, cg_tol, cd_solve.tr_cg, cd_solve.cache_mem()]]
-libdir_iterators = lambda qe_key, simidx, version: opj(TEMP,'%s_sim%04d'%(qe_key, simidx) + version)
+libdir_iterators = lambda qe_key, simidx, version: opj(TEMP+"recs",'%s_sim%04d'%(qe_key, simidx) + version)
 #------------------
 
 # Fiducial CMB spectra for QE and iterative reconstructions
@@ -213,7 +237,7 @@ cacher_walpha = cachers.cacher_npy(DATDIRwalpha)
 #cmb_len = sims_cmb_len(DATDIR, lmax_transfer, cls_unl, lib_pha = cmb_phas, epsilon=1e-7, zerolensing = zero_lensing, zerobirefringence = zero_birefringence)
 #cmb_len_wcurl = sims_cmb_len(DATDIRwcurl, lmax_transfer, cls_unl_wcurl, lib_pha = cmb_phas, epsilon=1e-7)
 
-cmb_len_walpha = sims_cmb_len(DATDIRwalpha, lmax_transfer, cls_unl_walpha, lib_pha = cmb_phas, epsilon=1e-7, zerolensing = zero_lensing, zerobirefringence = zero_birefringence, zerocurl = zero_curl)
+cmb_len_walpha = sims_cmb_len(DATDIRwalpha, lmax_unl_generation, cls_unl_walpha, lib_pha = cmb_phas, epsilon=1e-7, zerolensing = zero_lensing, zerobirefringence = zero_birefringence, zerocurl = zero_curl)
 
 #sims      = maps.cmb_maps_harmonicspace(cmb_len, cls_transf, cls_noise, noise_phas)
 #sims_wcurl = maps.cmb_maps_harmonicspace(cmb_len_wcurl, cls_transf, cls_noise, noise_phas)
@@ -367,23 +391,33 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     almxfl(alm0, WF_a, mmax_qlm, True)  # Wiener-filter QE
     almxfl(alm0, caa > 0, mmax_qlm, True)
 
-    Rpp_unl, Roo_unl = qresp.get_response(k, lmax_ivf, 'p', cls_unl, cls_unl,
+    Rpp_unl, Roo_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,
                                           {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
 
-    Raa_unl = qresp.get_response(k, lmax_ivf, 'a', cls_unl, cls_unl,
+    Raa_unl = qresp.get_response('a' + k[1:], lmax_ivf, 'a', cls_unl, cls_unl,
                                     {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
     
     # Lensing deflection field instance (initiated here with zero deflection)
 
     ffi = deflection(lenjob_geometry, np.zeros_like(plm0), mmax_qlm, numthreads=tr, epsilon=1e-7)
 
-    LensingOp = secondaries.Lensing(name = "lensing", lmax = ffi.lmax_dlm, mmax = ffi.mmax_dlm, sht_tr = tr)
-    LensingOp.set_field(ffi)
+    if k in ['p_p', 'a_p']:
+        if joint_module:
+            plm0 = alm0
+            LensingOp = secondaries.Lensing(name = "p", lmax = ffi.lmax_dlm, mmax = ffi.mmax_dlm, sht_tr = tr)
+            LensingOp.set_field(ffi)
 
-    if k in ['p_p']:
-        if param_joint:
-            filtr = alm_filter_nlev_wl(nlev_p, transf_elm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf),
-                                        transf_b=transf_blm, nlev_b=nlev_p, operators = LensingOp)
+            RotationOp = secondaries.Rotation(name = "a", lmax = lmax_qlm, mmax = mmax_qlm, sht_tr = tr)
+            alpha_map = ninv_geom.synthesis(plm0, spin = 0, lmax = lmax_qlm, mmax = mmax_qlm, nthreads = 128).squeeze()
+            RotationOp.set_field(np.zeros_like(alpha_map))
+
+            do_lensing = False
+            Operator = secondaries.Operators([RotationOp if not do_lensing else LensingOp])
+
+            filtr = alm_filter_nlev_wl(ninv_geom, nlev_p, transf_elm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf),
+                                        transf_b=transf_blm, nlev_b=nlev_p, operators = Operator)
+            
+            Rpp_unl, cpp = Raa_unl, caa
         else:
             # Here multipole cuts are set by the transfer function (those with 0 are not considered)
             filtr = alm_filter_nlev_wl(nlev_p, ffi, transf_elm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf),
@@ -419,7 +453,9 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
         assert 0
 
 
-    k_geom = filtr.ffi.geom # Customizable Geometry for position-space operations in calculations of the iterated QEs etc
+    k_geom = filtr.ffi.geom if not joint_module else LensingOp.field.geom # Customizable Geometry for position-space operations in calculations of the iterated QEs etc
+
+
     if 'wcurl' in version:
         # Sets to zero all L-modes below Lmin in the iterations:
         stepper = utils_steps.harmonicbump(xa=400, xb=1500)

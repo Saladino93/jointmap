@@ -76,6 +76,20 @@ parser.add_argument('-mmax_unl', dest='mmax_unl', type=int, default=4096, help='
 parser.add_argument('-lmax_qlm', dest='lmax_qlm', type=int, default=5120, help='lmax_qlm')
 parser.add_argument('-mmax_qlm', dest='mmax_qlm', type=int, default=5120, help='mmax_qlm')
 
+parser.add_argument('-Lmin', dest='Lmin', type=int, default=1, help='Lmin reconstruction')
+
+parser.add_argument('-lmin_tlm', dest='lmin_tlm', type=int, default=1, help='lmin_tlm')
+parser.add_argument('-lmin_elm', dest='lmin_elm', type=int, default=2, help='lmin_elm')
+parser.add_argument('-lmin_blm', dest='lmin_blm', type=int, default=2, help='lmin_blm')
+
+parser.add_argument('-lmax_ivf', dest='lmax_ivf', type=int, default=4096, help='lmax_ivf')
+parser.add_argument('-mmax_ivf', dest='mmax_ivf', type=int, default=4096, help='mmax_ivf')
+
+parser.add_argument('-beam', dest='beam', type=float, default=1., help='beam')
+
+parser.add_argument('-nlev_t', dest='nlev_t', type=float, default=0.5 / np.sqrt(2), help='nlev_t')
+parser.add_argument('-nlev_p', dest='nlev_p', type=float, default=0.5, help='nlev_p')
+
 parser.add_argument('-selected', dest='selected', nargs='+',  default = "a", help="List of selected estimators, separated by spaces.")
 
 args = parser.parse_args()
@@ -87,14 +101,16 @@ lmax_qlm, mmax_qlm = args.lmax_qlm, args.mmax_qlm # Lensing map is reconstructed
 lmax_unl, mmax_unl = args.lmax_unl, args.mmax_unl  # Delensed CMB is reconstructed down to this lmax and mmax
 
 nside = 2048
-lmax_transfer = 4096
-
 dlmax = 1024
 lmax_unl_generation = 5000
 
-lmax_ivf, mmax_ivf, beam, nlev_t, nlev_p = (4096, 4096, 1., 0.5 / np.sqrt(2), 0.5)
-lmin_tlm, lmin_elm, lmin_blm = (1, 2, 2) # The fiducial transfer functions are set to zero below these lmins
+Lmin = args.Lmin
+
+lmax_ivf, mmax_ivf, beam, nlev_t, nlev_p = (args.lmax_ivf, args.mmax_ivf, args.beam, args.nlev_t, args.nlev_p)
+lmin_tlm, lmin_elm, lmin_blm = (args.lmin_tlm, args.lmin_elm, args.lmin_blm) # The fiducial transfer functions are set to zero below these lmins
 # for delensing useful to cut much more B. It can also help since the cg inversion does not have to reconstruct those.
+
+lmax_transfer = lmax_ivf
 
 
 zero_lensing = args.no_lensing
@@ -137,7 +153,7 @@ ninv_geom = lenjob_geometry #utils_scarf.Geom.get_thingauss_geometry(lmax_qlm + 
 #ninv_geom = utils_scarf.Geom.get_thingauss_geometry(lmax_qlm + 100, 2)
 
 lenjob_pbgeometry = pbdGeometry(lenjob_geometry, pbounds(0., 2 * np.pi))
-Lmin = 1 # The reconstruction of all lensing multipoles below that will not be attempted
+Lmin = Lmin # The reconstruction of all lensing multipoles below that will not be attempted
 mc_sims_mf_it0 = np.array([]) # sims to use to build the very first iteration mean-field (QE mean-field) Here 0 since idealized
 
 
@@ -321,7 +337,6 @@ def get_n0_iter(k='p_p'):
     return cacher_wcurl.load(fnN0s), delclsdict
 
 # -------------------------
-
 def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     """Return iterator instance for simulation idx and qe_key type k
         Args:
@@ -436,13 +451,21 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     print("Response matrix shape", response_matrix.shape)
 
     non_zero = (Rpp>0)
-    total_curvature_matrix = total_inv_curvature_matrix.copy()
+    total_curvature_matrix = np.zeros_like(total_inv_curvature_matrix)
     total_curvature_matrix[non_zero, ...] = np.linalg.inv(total_inv_curvature_matrix[non_zero, ...])
     total_curvature_matrix = np.nan_to_num(total_curvature_matrix)
     cpp_mask = (cpp > 0)
     cpp_mask = cpp_mask[:, np.newaxis, np.newaxis]
     pp_h0s_matrix = total_curvature_matrix * cpp_mask
     inv_signal_matrix = inv_signal_matrix * cpp_mask
+
+    np.save("pp_h0s_matrix", pp_h0s_matrix)
+
+
+    chh = cpp[:lmax_qlm+1]
+    hh_h0 = cli(Rpp_unl[:lmax_qlm + 1] + cli(chh))  #~ (1/Cpp + 1/N0)^-1
+    hh_h0 *= (chh > 0)
+    np.save("hh_h0.npy", hh_h0)
 
 
     starting_points_dictionary = {"p": plm0, "a": alm0, "o": olm0}
@@ -465,7 +488,11 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
             operators_dictionary = {"p": LensingOp, "o": CurlLensingOp, "a": RotationOp}
 
-            Operator = secondaries.Operators([operators_dictionary[oper] for oper in selected])
+            #in principle I should just have a deflection field, then I could set up properties of this deflection field
+            #properties would include gradient and curl parts
+            ignore_calling = ["o"] if "p" in selected else [] 
+
+            Operator = secondaries.Operators([operators_dictionary[oper] for oper in selected], ignore_calling = ignore_calling)
 
             print("Operators are", Operator.names)
 
@@ -520,9 +547,16 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
     else: # standard gradient only
         stepper = steps.harmonicbump(lmax_qlm, mmax_qlm, xa=400, xb=1500)  # reduce the gradient by 0.5 for large scale and by 0.1 for small scales to improve convergence in regimes where the deflection field is not invertible
-        iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,
-            plm0, plm0 * 0, Rpp_unl, cpp, cls_unl, filtr, k_geom, chain_descrs(lmax_unl, cg_tol), stepper
-            , wflm0=lambda : alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl), pp_h0s_matrix = pp_h0s_matrix, inv_signal_matrix = inv_signal_matrix)
+        #stepper = utils_steps.nrstep(lmax_qlm, mmax_qlm, val = step_val)
+        
+        if joint_module:
+            iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,
+                plm0, plm0 * 0, Rpp_unl, cpp, cls_unl, filtr, k_geom, chain_descrs(lmax_unl, cg_tol), stepper
+                , wflm0=lambda : alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl), pp_h0s_matrix = pp_h0s_matrix, inv_signal_matrix = inv_signal_matrix)
+        else:
+            iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,
+                plm0, plm0 * 0, Rpp_unl, cpp, cls_unl, filtr, k_geom, chain_descrs(lmax_unl, cg_tol), stepper
+                , wflm0=lambda : alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl))
     return iterator
 
 if __name__ == '__main__':

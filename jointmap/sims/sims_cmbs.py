@@ -144,7 +144,7 @@ class sims_cmb_len(object):
     """
     def __init__(self, lib_dir, lmax, cls_unl, lib_pha=None, offsets_plm=None, offsets_cmbunl=None,
                  dlmax=1024, nside_lens=4096, facres=0, nbands=8, verbose=True, lmin_dlm = 2, extra_tlm = None, epsilon = 1e-7, 
-                 nocmb = False, zerolensing = False, zerobirefringence = True, zerocurl = True):
+                 nocmb = False, zerolensing = False, zerobirefringence = True, zerocurl = True, zerotau = True):
         if not os.path.exists(lib_dir) and mpi.rank == 0:
             os.makedirs(lib_dir)
         mpi.barrier()
@@ -169,6 +169,7 @@ class sims_cmb_len(object):
         self.zerolensing = zerolensing
         self.zerobirefringence = zerobirefringence
         self.zerocurl = zerocurl
+        self.zerotau = zerotau
 
         self.unlcmbs = cmbs.sims_cmb_unl(cls_unl, lib_pha)
         self.lib_dir = lib_dir
@@ -233,6 +234,21 @@ class sims_cmb_len(object):
             hp.write_alm(pfname, result)
             return result
         
+    
+    def get_sim_tau_lm(self, idx):
+        index = self.offset_index(idx, self.offset_plm[0], self.offset_plm[1])
+        pfname = os.path.join(self.lib_dir, 'sim_%04d_tau_lm.fits' % index)
+        try:
+            return hp.read_alm(pfname)
+        except:
+            if 't' in self.fields:
+                print("Getting tau sim from unlcmbs")
+                result = self.unlcmbs.get_sim_tau_lm(index)*(1-self.zerotau)
+                hp.write_alm(pfname, result)
+                return result
+            else:
+                return np.zeros_like(self.get_sim_plm(idx))
+        
 
     def get_sim_alpha_lm(self, idx):
         index = self.offset_index(idx, self.offset_plm[0], self.offset_plm[1])
@@ -254,7 +270,7 @@ class sims_cmb_len(object):
         try:
             return hp.read_alm(pfname)
         except:
-            if 'o' in self.fields:
+            if ('o' in self.fields) and (not self.zerocurl):
                 print("Getting olm sim from unlcmbs")
                 result = self.unlcmbs.get_sim_olm(idx)*(1-self.zerocurl)
                 hp.write_alm(pfname, result)
@@ -283,6 +299,15 @@ class sims_cmb_len(object):
         Urot = - Q * s + U * c
         return Qrot, Urot
     
+
+    @staticmethod
+    def patchy_tau(Q, U, tau):
+        exp = np.exp(-tau)
+        Q *= exp
+        U *= exp
+        return Q, U
+        
+    
     def _cache_eblm(self, idx):
         elm = self.unlcmbs.get_sim_elm(self.offset_index(idx, self.offset_cmb[0], self.offset_cmb[1]))
         blm = None if 'b' not in self.fields else self.unlcmbs.get_sim_blm(self.offset_index(idx, self.offset_cmb[0], self.offset_cmb[1]))
@@ -298,16 +323,23 @@ class sims_cmb_len(object):
             del Q, U
 
 
-        dlm, dclm, _, _ = self._get_dlm(idx)
-        
-        #assert 'o' not in self.fields, 'not implemented'
+        if not self.zerotau:
+            print('Patching tau', flush = True)
+            tau_lm = self.get_sim_tau_lm(idx)
+            tau = hp.alm2map(tau_lm, nside = self.nside_lens)
+            lmax_map = hp.Alm.getlmax(elm.size)
+            Q, U = hp.alm2map_spin([elm, blm], spin = 2, nside = self.nside_lens, lmax = lmax_map)
+            Q, U = self.patchy_tau(Q, U, tau)
+            elm, blm = hp.map2alm_spin([Q, U], 2, lmax = lmax_map)
+            del Q, U
 
-        #lmaxd = hp.Alm.getlmax(dlm.size)
-        #hp.almxfl(dlm, np.sqrt(np.arange(lmaxd + 1, dtype=float) * np.arange(1, lmaxd + 2)), inplace=True)
-        Qlen, Ulen = self.lens_module.alm2lenmap_spin([elm, blm], [dlm, dclm], 2, geometry = ('healpix', {'nside': self.nside_lens}), epsilon = self.epsilon, verbose = 0)
 
-        elm, blm = hp.map2alm_spin([Qlen, Ulen], 2, lmax=self.lmax)
-        del Qlen, Ulen
+        if not self.zerolensing:
+            dlm, dclm, _, _ = self._get_dlm(idx)
+            Qlen, Ulen = self.lens_module.alm2lenmap_spin([elm, blm], [dlm, dclm], 2, geometry = ('healpix', {'nside': self.nside_lens}), epsilon = self.epsilon, verbose = 0)
+            elm, blm = hp.map2alm_spin([Qlen, Ulen], 2, lmax=self.lmax)
+            del Qlen, Ulen
+
         hp.write_alm(os.path.join(self.lib_dir, 'sim_%04d_elm.fits' % idx), elm)
         del elm
         hp.write_alm(os.path.join(self.lib_dir, 'sim_%04d_blm.fits' % idx), blm)

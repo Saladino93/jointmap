@@ -242,13 +242,11 @@ cls_transf = {f: transf_dat for f in ['t', 'e', 'b']}
 
 if mpi.rank ==0:
     # Problem of creating dir in parallel if does not exist
-    cacher = cachers.cacher_npy(DATDIR)
-    cacher_wcurl = cachers.cacher_npy(DATDIRwcurl)
+    #cacher = cachers.cacher_npy(DATDIR)
+    #cacher_wcurl = cachers.cacher_npy(DATDIRwcurl)
+    cacher_walpha = cachers.cacher_npy(DATDIRwalpha)
 mpi.barrier()
 
-cacher = cachers.cacher_npy(DATDIR)
-cacher_wcurl = cachers.cacher_npy(DATDIRwcurl)
-cacher_walpha = cachers.cacher_npy(DATDIRwalpha)
 
 #cmb_unl = sims_cmb_unl(cls_unl, cmb_phas)
 #cmb_unl_wcurl = sims_cmb_unl(cls_unl_wcurl, cmb_phas)

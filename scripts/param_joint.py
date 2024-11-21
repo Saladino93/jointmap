@@ -76,7 +76,12 @@ parser.add_argument('-mmax_unl', dest='mmax_unl', type=int, default=4096, help='
 parser.add_argument('-lmax_qlm', dest='lmax_qlm', type=int, default=5120, help='lmax_qlm')
 parser.add_argument('-mmax_qlm', dest='mmax_qlm', type=int, default=5120, help='mmax_qlm')
 
+parser.add_argument('-selected', dest='selected', nargs='+',  default = "a", help="List of selected estimators, separated by spaces.")
+
 args = parser.parse_args()
+
+selected = args.selected
+print("Selected estimators", selected)
 
 lmax_qlm, mmax_qlm = args.lmax_qlm, args.mmax_qlm # Lensing map is reconstructed down to this lmax and mmax
 lmax_unl, mmax_unl = args.lmax_unl, args.mmax_unl  # Delensed CMB is reconstructed down to this lmax and mmax
@@ -127,8 +132,8 @@ cmb_phas = phas.lib_phas(opj(os.environ['SCRATCH'], 'cmbphas_lmax%s'%(lmax_unl_g
 #----------------- pixelization and geometry info for the input maps and the MAP pipeline and for lensing operations
 lenjob_geometry = Geom.get_thingauss_geometry(lmax_unl * 2, 2)
 
-ninv_geom = utils_scarf.Geom.get_thingauss_geometry(lmax_qlm + 500, 2)
-lenjob_geometry = ninv_geom
+ninv_geom = lenjob_geometry #utils_scarf.Geom.get_thingauss_geometry(lmax_qlm + 500, 2)
+#lenjob_geometry = ninv_geom
 #ninv_geom = utils_scarf.Geom.get_thingauss_geometry(lmax_qlm + 100, 2)
 
 lenjob_pbgeometry = pbdGeometry(lenjob_geometry, pbounds(0., 2 * np.pi))
@@ -401,23 +406,72 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
     ffi = deflection(lenjob_geometry, np.zeros_like(plm0), mmax_qlm, numthreads=tr, epsilon=1e-7)
 
+
+    #list of fields....
+    #then create matrices
+    names = ["p", "a", "o"]
+
+    signal_dictionary = {"pp": cpp, "oo": coo, "aa": caa}
+    response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl}
+    
+    Nselected = len(selected)
+
+    signal_matrix = np.zeros((cpp.size, Nselected, Nselected))
+    response_matrix = np.zeros_like(signal_matrix)
+
+    for i, m in enumerate(selected):
+        for j, l in enumerate(selected):
+            key = l + m
+            if key in signal_dictionary.keys():
+                signal_matrix[..., i, j] = signal_dictionary[key]
+            if key in response_dictionary.keys():
+                response_matrix[..., i, j] = response_dictionary[key]
+
+    non_zero = (cpp>0)
+    inv_signal_matrix = np.zeros_like(signal_matrix)
+    inv_signal_matrix[non_zero, ...] = np.linalg.inv(signal_matrix[non_zero, ...])
+
+    total_inv_curvature_matrix = inv_signal_matrix + response_matrix
+
+    print("Response matrix shape", response_matrix.shape)
+
+    non_zero = (Rpp>0)
+    total_curvature_matrix = total_inv_curvature_matrix.copy()
+    total_curvature_matrix[non_zero, ...] = np.linalg.inv(total_inv_curvature_matrix[non_zero, ...])
+    total_curvature_matrix = np.nan_to_num(total_curvature_matrix)
+    cpp_mask = (cpp > 0)
+    cpp_mask = cpp_mask[:, np.newaxis, np.newaxis]
+    pp_h0s_matrix = total_curvature_matrix * cpp_mask
+    inv_signal_matrix = inv_signal_matrix * cpp_mask
+
+
+    starting_points_dictionary = {"p": plm0, "a": alm0, "o": olm0}
+
+    plm0 = np.concatenate([starting_points_dictionary[key] for key in selected])
+    
+
     if k in ['p_p', 'a_p']:
         if joint_module:
-            plm0 = alm0
+            
             LensingOp = secondaries.Lensing(name = "p", lmax = ffi.lmax_dlm, mmax = ffi.mmax_dlm, sht_tr = tr)
             LensingOp.set_field(ffi)
+
+            CurlLensingOp = secondaries.Lensing(name = "o", lmax = ffi.lmax_dlm, mmax = ffi.mmax_dlm, sht_tr = tr)
+            CurlLensingOp.set_field(ffi)
 
             RotationOp = secondaries.Rotation(name = "a", lmax = lmax_qlm, mmax = mmax_qlm, sht_tr = tr)
             alpha_map = ninv_geom.synthesis(plm0, spin = 0, lmax = lmax_qlm, mmax = mmax_qlm, nthreads = 128).squeeze()
             RotationOp.set_field(np.zeros_like(alpha_map))
 
-            do_lensing = False
-            Operator = secondaries.Operators([RotationOp if not do_lensing else LensingOp])
+            operators_dictionary = {"p": LensingOp, "o": CurlLensingOp, "a": RotationOp}
+
+            Operator = secondaries.Operators([operators_dictionary[oper] for oper in selected])
+
+            print("Operators are", Operator.names)
 
             filtr = alm_filter_nlev_wl(ninv_geom, nlev_p, transf_elm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf),
                                         transf_b=transf_blm, nlev_b=nlev_p, operators = Operator)
             
-            Rpp_unl, cpp = Raa_unl, caa
         else:
             # Here multipole cuts are set by the transfer function (those with 0 are not considered)
             filtr = alm_filter_nlev_wl(nlev_p, ffi, transf_elm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf),
@@ -468,7 +522,7 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
         stepper = steps.harmonicbump(lmax_qlm, mmax_qlm, xa=400, xb=1500)  # reduce the gradient by 0.5 for large scale and by 0.1 for small scales to improve convergence in regimes where the deflection field is not invertible
         iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,
             plm0, plm0 * 0, Rpp_unl, cpp, cls_unl, filtr, k_geom, chain_descrs(lmax_unl, cg_tol), stepper
-            , wflm0=lambda : alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl))
+            , wflm0=lambda : alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl), pp_h0s_matrix = pp_h0s_matrix, inv_signal_matrix = inv_signal_matrix)
     return iterator
 
 if __name__ == '__main__':

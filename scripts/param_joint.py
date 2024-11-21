@@ -459,14 +459,10 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     pp_h0s_matrix = total_curvature_matrix * cpp_mask
     inv_signal_matrix = inv_signal_matrix * cpp_mask
 
-    np.save("pp_h0s_matrix", pp_h0s_matrix)
-
 
     chh = cpp[:lmax_qlm+1]
     hh_h0 = cli(Rpp_unl[:lmax_qlm + 1] + cli(chh))  #~ (1/Cpp + 1/N0)^-1
     hh_h0 *= (chh > 0)
-    np.save("hh_h0.npy", hh_h0)
-
 
     starting_points_dictionary = {"p": plm0, "a": alm0, "o": olm0}
 

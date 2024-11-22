@@ -141,8 +141,8 @@ if not os.path.exists(DATDIR):
 # harmonic space noise phas down to 4096
 noise_phas = phas.lib_phas(opj(os.environ['SCRATCH'], 'noisephas_lmax%s'%(lmax_unl_generation)), 3, lmax_unl_generation) # T, E, and B noise phases
 
-fields_of_interest = ['T', 'E', 'B', 'P', 'O', 'Alpha']
-cmb_phas = phas.lib_phas(opj(os.environ['SCRATCH'], 'cmbphas_lmax%s'%(lmax_unl_generation+dlmax)), len(fields_of_interest), lmax_unl_generation+dlmax) # unlensed T E B P O Alpha, CMB phases
+fields_of_interest = ['T', 'E', 'B', 'P', 'O', 'Alpha', 'Tau']
+cmb_phas = phas.lib_phas(opj(os.environ['SCRATCH'], 'cmbphas_ncomps%s_lmax%s'%(len(fields_of_interest), lmax_unl_generation+dlmax)), len(fields_of_interest), lmax_unl_generation+dlmax) # unlensed T E B P O Alpha Tau, CMB phases
 
 
 #----------------- pixelization and geometry info for the input maps and the MAP pipeline and for lensing operations
@@ -209,6 +209,13 @@ ell = np.arange(0, len(cls_unl_walpha["tt"])+1)
 cls_alpha = 10**(-args.ACB)*2*np.pi/(ell*(ell+1))
 cls_alpha[0] = 0
 cls_unl_walpha["aa"] = cls_alpha
+
+HOME = os.environ['HOME']
+tau_dir = opj(HOME, 'jointmap', 'data', 'tau_lensing_data')
+tau_phi = np.loadtxt(opj(tau_dir, "theory_spectra_optimistic_ptau.txt"))
+tau_tau = np.loadtxt(opj(tau_dir, "theory_spectra_optimistic_tautau.txt")) 
+cls_unl_walpha["pu"] = tau_phi
+cls_unl_walpha["uu"] = tau_tau
 
 print(cls_unl_walpha.keys())
 

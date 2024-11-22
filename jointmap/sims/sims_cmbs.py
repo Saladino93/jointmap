@@ -241,7 +241,7 @@ class sims_cmb_len(object):
         try:
             return hp.read_alm(pfname)
         except:
-            if 't' in self.fields:
+            if 'f' in self.fields:
                 print("Getting tau sim from unlcmbs")
                 result = self.unlcmbs.get_sim_tau_lm(index)*(1-self.zerotau)
                 hp.write_alm(pfname, result)
@@ -316,7 +316,7 @@ class sims_cmb_len(object):
             print('Rotating polarization', flush = True)
             alpha_lm = self.get_sim_alpha_lm(idx)
             alpha = hp.alm2map(alpha_lm, nside = self.nside_lens)
-            lmax_map = hp.Alm.getlmax(elm.size)
+            lmax_map = self.lmax
             Q, U = hp.alm2map_spin([elm, blm], spin = 2, nside = self.nside_lens, lmax = lmax_map)
             Q, U = self.rotate_polarization(Q, U , alpha)
             elm, blm = hp.map2alm_spin([Q, U], 2, lmax = lmax_map)
@@ -327,12 +327,11 @@ class sims_cmb_len(object):
             print('Patching tau', flush = True)
             tau_lm = self.get_sim_tau_lm(idx)
             tau = hp.alm2map(tau_lm, nside = self.nside_lens)
-            lmax_map = hp.Alm.getlmax(elm.size)
+            lmax_map = self.lmax
             Q, U = hp.alm2map_spin([elm, blm], spin = 2, nside = self.nside_lens, lmax = lmax_map)
             Q, U = self.patchy_tau(Q, U, tau)
             elm, blm = hp.map2alm_spin([Q, U], 2, lmax = lmax_map)
             del Q, U
-
 
         if not self.zerolensing:
             dlm, dclm, _, _ = self._get_dlm(idx)

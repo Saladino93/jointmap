@@ -66,6 +66,7 @@ parser.add_argument('-p', dest='plot', action='store_true', help='make some plot
 parser.add_argument('-no_lensing', dest='no_lensing', action='store_true', help='no lensing')
 parser.add_argument('-no_curl', dest='no_curl', action='store_true', help='no curl')
 parser.add_argument('-no_birefringence', dest='no_birefringence', action='store_true', help='no birefringence')
+parser.add_argument('-no_tau', dest='no_tau', action='store_true', help='no tau')
 parser.add_argument('-ACB', help='amplitude (A_CB) in - log10', type=float, default=7)
 parser.add_argument('-cmb_version', type=str, default = "")
 parser.add_argument('-joint_module', dest='joint_module', action='store_true', help='use the new joint module')
@@ -116,6 +117,7 @@ lmax_transfer = lmax_ivf
 zero_lensing = args.no_lensing
 zero_birefringence = args.no_birefringence
 zero_curl = args.no_curl
+zero_tau = args.no_tau
 cmb_version = args.cmb_version
 joint_module = args.joint_module
 
@@ -205,6 +207,12 @@ factor = cli(ls*(ls+1)/2)
 cls_unl_wcurl["oo"] = cls_rot*factor**2.
 
 cls_unl_walpha = copy.deepcopy(cls_unl_wcurl)
+
+Nelements = 7999
+for k, v in cls_unl_walpha.items():
+    cls_unl_walpha[k] = v[:Nelements+1]
+
+
 ell = np.arange(0, len(cls_unl_walpha["tt"])+1)
 cls_alpha = 10**(-args.ACB)*2*np.pi/(ell*(ell+1))
 cls_alpha[0] = 0
@@ -214,8 +222,10 @@ HOME = os.environ['HOME']
 tau_dir = opj(HOME, 'jointmap', 'data', 'tau_lensing_data')
 tau_phi = np.loadtxt(opj(tau_dir, "theory_spectra_optimistic_ptau.txt"))
 tau_tau = np.loadtxt(opj(tau_dir, "theory_spectra_optimistic_tautau.txt")) 
-cls_unl_walpha["pf"] = tau_phi
-cls_unl_walpha["ff"] = tau_tau
+tau_tau[1] = cls_unl_walpha["pp"][1]
+tau_phi[1] = cls_unl_walpha["pp"][1]
+cls_unl_walpha["ff"] = tau_tau[:ell.size]
+cls_unl_walpha["fp"] = tau_phi[:ell.size]
 
 print(cls_unl_walpha.keys())
 
@@ -263,7 +273,7 @@ mpi.barrier()
 #cmb_len = sims_cmb_len(DATDIR, lmax_transfer, cls_unl, lib_pha = cmb_phas, epsilon=1e-7, zerolensing = zero_lensing, zerobirefringence = zero_birefringence)
 #cmb_len_wcurl = sims_cmb_len(DATDIRwcurl, lmax_transfer, cls_unl_wcurl, lib_pha = cmb_phas, epsilon=1e-7)
 
-cmb_len_walpha = sims_cmb_len(DATDIRwalpha, lmax_unl_generation, cls_unl_walpha, lib_pha = cmb_phas, epsilon=1e-7, zerolensing = zero_lensing, zerobirefringence = zero_birefringence, zerocurl = zero_curl)
+cmb_len_walpha = sims_cmb_len(DATDIRwalpha, lmax_unl_generation, cls_unl_walpha, lib_pha = cmb_phas, epsilon=1e-7, zerolensing = zero_lensing, zerobirefringence = zero_birefringence, zerocurl = zero_curl, zero_tau = zero_tau)
 
 #sims      = maps.cmb_maps_harmonicspace(cmb_len, cls_transf, cls_noise, noise_phas)
 #sims_wcurl = maps.cmb_maps_harmonicspace(cmb_len_wcurl, cls_transf, cls_noise, noise_phas)
@@ -367,7 +377,7 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
     cff = np.copy(cls_unl_walpha['ff'][:lmax_qlm + 1]) #u is tau
     cff[:Lmin] *= 0.
-    cpf = np.copy(cls_unl_walpha['pf'][:lmax_qlm + 1])
+    cpf = np.copy(cls_unl_walpha['fp'][:lmax_qlm + 1])
     cpf[:Lmin] *= 0.
 
     # QE mean-field fed in as constant piece in the iteration steps:
@@ -453,8 +463,8 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     #then create matrices
     names = ["p", "a", "o", "f"]
 
-    signal_dictionary = {"pp": cpp, "oo": coo, "aa": caa, "pf": cpf, "ff": cff}
-    response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "pf": Rpp_unl, "ff": Rff_unl}
+    signal_dictionary = {"pp": cpp, "oo": coo, "aa": caa, "fp": cpf, "ff": cff}
+    response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "fp": Rpp_unl, "ff": Rff_unl}
     
     Nselected = len(selected)
 

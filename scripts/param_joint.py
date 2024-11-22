@@ -214,8 +214,8 @@ HOME = os.environ['HOME']
 tau_dir = opj(HOME, 'jointmap', 'data', 'tau_lensing_data')
 tau_phi = np.loadtxt(opj(tau_dir, "theory_spectra_optimistic_ptau.txt"))
 tau_tau = np.loadtxt(opj(tau_dir, "theory_spectra_optimistic_tautau.txt")) 
-cls_unl_walpha["pu"] = tau_phi
-cls_unl_walpha["uu"] = tau_tau
+cls_unl_walpha["pf"] = tau_phi
+cls_unl_walpha["ff"] = tau_tau
 
 print(cls_unl_walpha.keys())
 
@@ -365,6 +365,11 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     caa = np.copy(cls_unl_walpha['aa'][:lmax_qlm + 1])
     caa[:Lmin] *= 0.
 
+    cff = np.copy(cls_unl_walpha['ff'][:lmax_qlm + 1]) #u is tau
+    cff[:Lmin] *= 0.
+    cpf = np.copy(cls_unl_walpha['pf'][:lmax_qlm + 1])
+    cpf[:Lmin] *= 0.
+
     # QE mean-field fed in as constant piece in the iteration steps:
 
     qlms_dd_QE = qlms_dd_walpha
@@ -374,16 +379,20 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     mf0_p = qlms_dd_QE.get_sim_qlm_mf('p' + k[1:], mf_sims)  # Mean-field to subtract on the first iteration:
     mf0_o = qlms_dd_QE.get_sim_qlm_mf('x' + k[1:], mf_sims)  # Mean-field to subtract on the first iteration:
     mf0_a = qlms_dd_QE.get_sim_qlm_mf('a' + k[1:], mf_sims)  # Mean-field to subtract on the first iteration:
+    mf0_f = qlms_dd_QE.get_sim_qlm_mf('f' + k[1:], mf_sims)  # Mean-field to subtract on the first iteration:
+
 
     if simidx in mf_sims:  # We dont want to include the sim we consider in the mean-field...
         Nmf = len(mf_sims)
         mf0_p = (mf0_p - qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx)) / Nmf) * (Nmf / (Nmf - 1))
         mf0_o = (mf0_o - qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx)) / Nmf) * (Nmf / (Nmf - 1))
         mf0_a = (mf0_a - qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx)) / Nmf) * (Nmf / (Nmf - 1))
+        mf0_f = (mf0_f - qlms_dd_QE.get_sim_qlm('f' + k[1:], int(simidx)) / Nmf) * (Nmf / (Nmf - 1))
 
     plm0 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx)) - mf0_p  # Unormalized quadratic estimate:
     olm0 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx)) - mf0_o  # Unormalized quadratic estimate:
     alm0 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx)) - mf0_a  # Unormalized quadratic estimate:
+    flm0 = qlms_dd_QE.get_sim_qlm('f' + k[1:], int(simidx)) - mf0_f  # Unormalized quadratic estimate:
 
     # Isotropic normalization of the QE
 
@@ -393,10 +402,14 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     Raa = qresp.get_response('a' + k[1:], lmax_ivf, 'a', cls_len, cls_len, {'e': fel, 'b': fbl, 't': ftl},
                                 lmax_qlm=lmax_qlm)[0]
     
+    Rff = qresp.get_response('f' + k[1:], lmax_ivf, 'f', cls_len, cls_len, {'e': fel, 'b': fbl, 't': ftl},
+                                lmax_qlm=lmax_qlm)[0]
+    
     # Isotropic Wiener-filter (here assuming for simplicity N0 ~ 1/R)
     WF_p = cpp * utils.cli(cpp + utils.cli(Rpp))
     WF_o = coo * utils.cli(coo + utils.cli(Roo))
     WF_a = caa * utils.cli(caa + utils.cli(Raa))
+    WF_f = cff * utils.cli(cff + utils.cli(Rff))
 
     plm0 = alm_copy(plm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
     almxfl(plm0, utils.cli(Rpp), mmax_qlm, True)  # Normalized QE
@@ -416,10 +429,19 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     almxfl(alm0, WF_a, mmax_qlm, True)  # Wiener-filter QE
     almxfl(alm0, caa > 0, mmax_qlm, True)
 
+    flm0 = alm_copy(flm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
+    almxfl(flm0, utils.cli(Rff), mmax_qlm, True)  # Normalized QE
+    np.save(libdir_iterator+"/flm0_norm.npy", flm0)
+    almxfl(flm0, WF_f, mmax_qlm, True)  # Wiener-filter QE
+    almxfl(flm0, cff > 0, mmax_qlm, True)
+
     Rpp_unl, Roo_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,
                                           {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
 
     Raa_unl = qresp.get_response('a' + k[1:], lmax_ivf, 'a', cls_unl, cls_unl,
+                                    {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
+    
+    Rff_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'f', cls_unl, cls_unl,
                                     {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
     
     # Lensing deflection field instance (initiated here with zero deflection)
@@ -429,10 +451,10 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
     #list of fields....
     #then create matrices
-    names = ["p", "a", "o"]
+    names = ["p", "a", "o", "f"]
 
-    signal_dictionary = {"pp": cpp, "oo": coo, "aa": caa}
-    response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl}
+    signal_dictionary = {"pp": cpp, "oo": coo, "aa": caa, "pf": cpf, "ff": cff}
+    response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "pf": Rpp_unl, "ff": Rff_unl}
     
     Nselected = len(selected)
 
@@ -443,9 +465,16 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
         for j, l in enumerate(selected):
             key = l + m
             if key in signal_dictionary.keys():
+                print("key", key)
                 signal_matrix[..., i, j] = signal_dictionary[key]
+            elif key[::-1] in signal_dictionary.keys():
+                print("reverse key", key[::-1])
+                signal_matrix[..., i, j] = signal_dictionary[key[::-1]]
+
             if key in response_dictionary.keys():
                 response_matrix[..., i, j] = response_dictionary[key]
+            elif key[::-1] in response_dictionary.keys():
+                response_matrix[..., i, j] = response_dictionary[key[::-1]]
 
     non_zero = (cpp>0)
     inv_signal_matrix = np.zeros_like(signal_matrix)
@@ -469,12 +498,12 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     hh_h0 = cli(Rpp_unl[:lmax_qlm + 1] + cli(chh))  #~ (1/Cpp + 1/N0)^-1
     hh_h0 *= (chh > 0)
 
-    starting_points_dictionary = {"p": plm0, "a": alm0, "o": olm0}
+    starting_points_dictionary = {"p": plm0, "a": alm0, "o": olm0, "f": flm0}
 
     plm0 = np.concatenate([starting_points_dictionary[key] for key in selected])
     
 
-    if k in ['p_p', 'a_p']:
+    if k in ['p_p']:
         if joint_module:
             
             LensingOp = secondaries.Lensing(name = "p", lmax = ffi.lmax_dlm, mmax = ffi.mmax_dlm, sht_tr = tr)
@@ -487,7 +516,10 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
             alpha_map = ninv_geom.synthesis(plm0, spin = 0, lmax = lmax_qlm, mmax = mmax_qlm, nthreads = 128).squeeze()
             RotationOp.set_field(np.zeros_like(alpha_map))
 
-            operators_dictionary = {"p": LensingOp, "o": CurlLensingOp, "a": RotationOp}
+            PatchyTauOp = secondaries.PatchyTau(name = "f", lmax = ffi.lmax_dlm, mmax = ffi.mmax_dlm, sht_tr = tr)
+            PatchyTauOp.set_field(np.zeros_like(alpha_map))
+
+            operators_dictionary = {"p": LensingOp, "o": CurlLensingOp, "a": RotationOp, "f": PatchyTauOp}
 
             #in principle I should just have a deflection field, then I could set up properties of this deflection field
             #properties would include gradient and curl parts

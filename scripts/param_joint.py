@@ -103,7 +103,7 @@ lmax_unl, mmax_unl = args.lmax_unl, args.mmax_unl  # Delensed CMB is reconstruct
 
 nside = 2048
 dlmax = 1024
-lmax_unl_generation = 5000
+lmax_unl_generation = 5000 #lmax for saving without CMBs
 
 Lmin = args.Lmin
 
@@ -225,7 +225,7 @@ tau_tau = np.loadtxt(opj(tau_dir, "theory_spectra_optimistic_tautau.txt"))
 tau_tau[1] = cls_unl_walpha["pp"][1]
 tau_phi[1] = cls_unl_walpha["pp"][1]
 cls_unl_walpha["ff"] = tau_tau[:ell.size]
-cls_unl_walpha["fp"] = tau_phi[:ell.size]
+cls_unl_walpha["fp"] = tau_phi[:ell.size]*0.
 
 print(cls_unl_walpha.keys())
 
@@ -453,18 +453,25 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     
     Rff_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'f', cls_unl, cls_unl,
                                     {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
+
+    Rpf_unl, Rof_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'f', cls_unl, cls_unl,
+                                          {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
+
+    Rfp_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,  
+                                    {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
+
+    print("Rfp_unl", Rfp_unl.shape)
     
     # Lensing deflection field instance (initiated here with zero deflection)
 
     ffi = deflection(lenjob_geometry, np.zeros_like(plm0), mmax_qlm, numthreads=tr, epsilon=1e-7)
 
-
     #list of fields....
     #then create matrices
     names = ["p", "a", "o", "f"]
 
-    signal_dictionary = {"pp": cpp, "oo": coo, "aa": caa, "fp": cpf, "ff": cff}
-    response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "fp": Rpp_unl, "ff": Rff_unl}
+    signal_dictionary = {"pp": cpp, "oo": coo, "aa": caa, "fp": cpf*0, "ff": cff}
+    response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "fp": Rfp_unl, "pf": Rpf_unl, "ff": Rff_unl}
     
     Nselected = len(selected)
 
@@ -483,8 +490,8 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
             if key in response_dictionary.keys():
                 response_matrix[..., i, j] = response_dictionary[key]
-            elif key[::-1] in response_dictionary.keys():
-                response_matrix[..., i, j] = response_dictionary[key[::-1]]
+            #elif key[::-1] in response_dictionary.keys():
+            #    response_matrix[..., i, j] = response_dictionary[key[::-1]]
 
     non_zero = (cpp>0)
     inv_signal_matrix = np.zeros_like(signal_matrix)

@@ -319,7 +319,8 @@ class sims_cmb_len(object):
             lmax_map = hp.Alm.getlmax(elm.size)
             Q, U = hp.alm2map_spin([elm, blm], spin = 2, nside = self.nside_lens, lmax = lmax_map)
             Q, U = self.rotate_polarization(Q, U , alpha)
-            elm, blm = hp.map2alm_spin([Q, U], 2, lmax = self.lmax)
+            elm, blm = hp.map2alm_spin([Q, U], 2, lmax = lmax_map)
+            
             del Q, U
 
 
@@ -330,14 +331,18 @@ class sims_cmb_len(object):
             lmax_map = hp.Alm.getlmax(elm.size)
             Q, U = hp.alm2map_spin([elm, blm], spin = 2, nside = self.nside_lens, lmax = lmax_map)
             Q, U = self.patchy_tau(Q, U, tau)
-            elm, blm = hp.map2alm_spin([Q, U], 2, lmax = self.lmax)
+            elm, blm = hp.map2alm_spin([Q, U], 2, lmax = lmax_map)
             del Q, U
 
         if not self.zerolensing:
             dlm, dclm, _, _ = self._get_dlm(idx)
+            lmax_map = hp.Alm.getlmax(elm.size)
             Qlen, Ulen = self.lens_module.alm2lenmap_spin([elm, blm], [dlm, dclm], 2, geometry = ('healpix', {'nside': self.nside_lens}), epsilon = self.epsilon, verbose = 0)
-            elm, blm = hp.map2alm_spin([Qlen, Ulen], 2, lmax=self.lmax)
+            elm, blm = hp.map2alm_spin([Qlen, Ulen], 2, lmax=lmax_map)
             del Qlen, Ulen
+
+        elm = utils.alm_copy(elm, self.lmax)
+        blm = utils.alm_copy(blm, self.lmax)
 
         hp.write_alm(os.path.join(self.lib_dir, 'sim_%04d_elm.fits' % idx), elm)
         del elm

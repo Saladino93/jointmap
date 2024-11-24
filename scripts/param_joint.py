@@ -225,7 +225,21 @@ tau_tau = np.loadtxt(opj(tau_dir, "theory_spectra_optimistic_tautau.txt"))
 tau_tau[1] = cls_unl_walpha["pp"][1]
 tau_phi[1] = cls_unl_walpha["pp"][1]
 cls_unl_walpha["ff"] = tau_tau[:ell.size]
-cls_unl_walpha["fp"] = tau_phi[:ell.size]*0.
+cls_unl_walpha["fp"] = tau_phi[:ell.size]
+
+"""
+fields_ = ['p', 'f', 't', 'e', 'b', 'o', 'a']
+
+result = {}
+for i1, k1 in enumerate(fields_):
+    for k2 in fields_[i1:]:
+        if k1+k2 in cls_unl_walpha.keys():
+            result[k1+k2] = cls_unl_walpha[k1+k2]
+        elif k2+k1 in cls_unl_walpha.keys():
+            result[k1+k2] = cls_unl_walpha[k2+k1]
+
+
+cls_unl_walpha = copy.deepcopy(result)"""
 
 print(cls_unl_walpha.keys())
 
@@ -377,7 +391,7 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
     cff = np.copy(cls_unl_walpha['ff'][:lmax_qlm + 1]) #u is tau
     cff[:Lmin] *= 0.
-    cpf = np.copy(cls_unl_walpha['fp'][:lmax_qlm + 1])
+    cpf = np.copy(cls_unl_walpha['pf'][:lmax_qlm + 1])
     cpf[:Lmin] *= 0.
 
     # QE mean-field fed in as constant piece in the iteration steps:
@@ -419,7 +433,7 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     WF_p = cpp * utils.cli(cpp + utils.cli(Rpp))
     WF_o = coo * utils.cli(coo + utils.cli(Roo))
     WF_a = caa * utils.cli(caa + utils.cli(Raa))
-    WF_f = cff * utils.cli(cff + utils.cli(Rff))
+    WF_f = cff * utils.cli(cff + utils.cli(Rff)) #is this the correct Wf in the presence of a cross-corr between tau and phi?
 
     plm0 = alm_copy(plm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
     almxfl(plm0, utils.cli(Rpp), mmax_qlm, True)  # Normalized QE
@@ -470,8 +484,8 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     #then create matrices
     names = ["p", "a", "o", "f"]
 
-    signal_dictionary = {"pp": cpp, "oo": coo, "aa": caa, "fp": cpf*0, "ff": cff}
-    response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "fp": Rfp_unl, "pf": Rpf_unl, "ff": Rff_unl}
+    signal_dictionary = {"pp": cpp, "oo": coo, "aa": caa, "pf": cpf*0, "ff": cff}
+    response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "pf": Rfp_unl, "pf": Rpf_unl, "ff": Rff_unl}
     
     Nselected = len(selected)
 

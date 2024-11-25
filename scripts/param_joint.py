@@ -55,6 +55,16 @@ import healpy as hp
 
 import argparse
 
+def fg_phases(mappa: np.ndarray, seed: int = 0):
+     np.random.seed(seed)
+     f = lambda z: np.exp(1j*np.random.uniform(0., 2.*np.pi, size = z.shape))
+     return f(mappa)
+
+def randomizing_fg(mappa: np.ndarray, seed: int = 0):
+     np.random.seed(seed)
+     f = lambda z: np.abs(z) * np.exp(1j*np.random.uniform(0., 2.*np.pi, size = z.shape))
+     return f(mappa)
+
 parser = argparse.ArgumentParser(description='test iterator full-sky with pert. resp.')
 parser.add_argument('-k', dest='k', type=str, default='p_p', help='rec. type')
 parser.add_argument('-itmax', dest='itmax', type=int, default=-1, help='maximal iter index')
@@ -67,6 +77,7 @@ parser.add_argument('-no_lensing', dest='no_lensing', action='store_true', help=
 parser.add_argument('-no_curl', dest='no_curl', action='store_true', help='no curl')
 parser.add_argument('-no_birefringence', dest='no_birefringence', action='store_true', help='no birefringence')
 parser.add_argument('-no_tau', dest='no_tau', action='store_true', help='no tau')
+parser.add_argument('-ns', dest='ns', type=float, default=1., help='Scale dependent cosmic birefringence')
 parser.add_argument('-ACB', help='amplitude (A_CB) in - log10', type=float, default=7)
 parser.add_argument('-cmb_version', type=str, default = "")
 parser.add_argument('-joint_module', dest='joint_module', action='store_true', help='use the new joint module')
@@ -89,11 +100,14 @@ parser.add_argument('-mmax_ivf', dest='mmax_ivf', type=int, default=4096, help='
 parser.add_argument('-beam', dest='beam', type=float, default=1., help='beam')
 
 parser.add_argument('-nlev_t', dest='nlev_t', type=float, default=0.5 / np.sqrt(2), help='nlev_t')
-parser.add_argument('-nlev_p', dest='nlev_p', type=float, default=0.5, help='nlev_p')
 
 parser.add_argument('-selected', dest='selected', nargs='+',  default = "a", help="List of selected estimators, separated by spaces.")
+parser.add_argument('-randomize', dest = 'randomize', action = 'store_true', help = 'randomize the estimators')
 
 args = parser.parse_args()
+
+
+randomize_function = (lambda x, idx: x) if not args.randomize else randomizing_fg
 
 selected = args.selected
 print("Selected estimators", selected)
@@ -107,7 +121,7 @@ lmax_unl_generation = 5000 #lmax for saving without CMBs
 
 Lmin = args.Lmin
 
-lmax_ivf, mmax_ivf, beam, nlev_t, nlev_p = (args.lmax_ivf, args.mmax_ivf, args.beam, args.nlev_t, args.nlev_p)
+lmax_ivf, mmax_ivf, beam, nlev_t, nlev_p = (args.lmax_ivf, args.mmax_ivf, args.beam, args.nlev_t, args.nlev_t*np.sqrt(2))
 lmin_tlm, lmin_elm, lmin_blm = (args.lmin_tlm, args.lmin_elm, args.lmin_blm) # The fiducial transfer functions are set to zero below these lmins
 # for delensing useful to cut much more B. It can also help since the cg inversion does not have to reconstruct those.
 
@@ -133,13 +147,16 @@ else:
 
 
 suffix = cmb_version # descriptor to distinguish this parfile from others...
-TEMP =  opj(os.environ['SCRATCH'], suffix)
-DATDIR = opj(os.environ['SCRATCH'], suffix, 'sims')
-DATDIRwcurl = opj(os.environ['SCRATCH'],suffix, 'simswcurl')
-DATDIRwalpha = opj(os.environ['SCRATCH'],suffix, 'simswalpha')
+folder_ = "JOINTRECONSTRUCTION"
+TEMP =  opj(os.environ['SCRATCH'], folder_, suffix)
+DATDIR = opj(os.environ['SCRATCH'], folder_, suffix, 'sims')
+DATDIRwcurl = opj(os.environ['SCRATCH'],folder_, suffix, 'simswcurl')
+DATDIRwalpha = opj(os.environ['SCRATCH'],folder_, suffix, 'simswalpha')
 
-if not os.path.exists(DATDIR):
-    os.makedirs(DATDIR)
+if mpi.rank == 0:
+    if not os.path.exists(DATDIR):
+        os.makedirs(DATDIR)
+mpi.barrier()
 # harmonic space noise phas down to 4096
 noise_phas = phas.lib_phas(opj(os.environ['SCRATCH'], 'noisephas_lmax%s'%(lmax_unl_generation)), 3, lmax_unl_generation) # T, E, and B noise phases
 
@@ -162,7 +179,8 @@ mc_sims_mf_it0 = np.array([]) # sims to use to build the very first iteration me
 # Multigrid chain descriptor
 # The hard coded number nside here is irrelevant for diagonal preconditioner
 chain_descrs = lambda lmax_sol, cg_tol : [[0, ["diag_cl"], lmax_sol, nside, np.inf, cg_tol, cd_solve.tr_cg, cd_solve.cache_mem()]]
-libdir_iterators = lambda qe_key, simidx, version: opj(TEMP+"recs",'%s_sim%04d'%(qe_key, simidx) + version)
+recs_folder = TEMP+f"_version_{args.v}_recs"
+libdir_iterators = lambda qe_key, simidx, version: opj(recs_folder,'%s_sim%04d'%(qe_key, simidx) + version)
 #------------------
 
 # Fiducial CMB spectra for QE and iterative reconstructions
@@ -214,7 +232,7 @@ for k, v in cls_unl_walpha.items():
 
 
 ell = np.arange(0, len(cls_unl_walpha["tt"])+1)
-cls_alpha = 10**(-args.ACB)*2*np.pi/(ell*(ell+1))
+cls_alpha = 10**(-args.ACB)*2*np.pi/(ell*(ell+1))**args.ns
 cls_alpha[0] = 0
 cls_unl_walpha["aa"] = cls_alpha
 
@@ -225,7 +243,10 @@ tau_tau = np.loadtxt(opj(tau_dir, "theory_spectra_optimistic_tautau.txt"))
 tau_tau[1] = cls_unl_walpha["pp"][1]
 tau_phi[1] = cls_unl_walpha["pp"][1]
 cls_unl_walpha["ff"] = tau_tau[:ell.size]
-cls_unl_walpha["fp"] = tau_phi[:ell.size]
+cls_unl_walpha["fp"] = tau_phi[:ell.size]*0.
+
+
+print(cls_unl_walpha.keys())
 
 """
 fields_ = ['p', 'f', 't', 'e', 'b', 'o', 'a']
@@ -287,7 +308,7 @@ mpi.barrier()
 #cmb_len = sims_cmb_len(DATDIR, lmax_transfer, cls_unl, lib_pha = cmb_phas, epsilon=1e-7, zerolensing = zero_lensing, zerobirefringence = zero_birefringence)
 #cmb_len_wcurl = sims_cmb_len(DATDIRwcurl, lmax_transfer, cls_unl_wcurl, lib_pha = cmb_phas, epsilon=1e-7)
 
-cmb_len_walpha = sims_cmb_len(DATDIRwalpha, lmax_unl_generation, cls_unl_walpha, lib_pha = cmb_phas, epsilon=1e-7, zerolensing = zero_lensing, zerobirefringence = zero_birefringence, zerocurl = zero_curl, zerotau = zero_tau)
+cmb_len_walpha = sims_cmb_len(DATDIRwalpha, lmax_unl_generation, cls_unl_walpha, lib_pha = cmb_phas, epsilon=1e-7, zerolensing = zero_lensing, zerobirefringence = zero_birefringence, zerocurl = zero_curl, zerotau = zero_tau, randomize_function = randomize_function)
 
 #sims      = maps.cmb_maps_harmonicspace(cmb_len, cls_transf, cls_noise, noise_phas)
 #sims_wcurl = maps.cmb_maps_harmonicspace(cmb_len_wcurl, cls_transf, cls_noise, noise_phas)
@@ -295,24 +316,24 @@ cmb_len_walpha = sims_cmb_len(DATDIRwalpha, lmax_unl_generation, cls_unl_walpha,
 sims_walpha = maps.cmb_maps_harmonicspace(cmb_len_walpha, cls_transf, cls_noise, noise_phas)
 # -------------------------
 
-#ivfs         = filt_simple.library_fullsky_alms_sepTP(opj(TEMP, 'ivfs'), sims, transf_d, cls_len, ftl, fel, fbl, cache=True)
-#ivfs_wcurl   = filt_simple.library_fullsky_alms_sepTP(opj(TEMP, 'ivfs_wcurl'), sims_wcurl, transf_d, cls_len, ftl, fel, fbl, cache=True)
-ivfs_walpha  = filt_simple.library_fullsky_alms_sepTP(opj(TEMP, 'ivfs_walpha'), sims_walpha, transf_d, cls_len, ftl, fel, fbl, cache=True)
+#ivfs         = filt_simple.library_fullsky_alms_sepTP(opj(recs_folder, 'ivfs'), sims, transf_d, cls_len, ftl, fel, fbl, cache=True)
+#ivfs_wcurl   = filt_simple.library_fullsky_alms_sepTP(opj(recs_folder, 'ivfs_wcurl'), sims_wcurl, transf_d, cls_len, ftl, fel, fbl, cache=True)
+ivfs_walpha  = filt_simple.library_fullsky_alms_sepTP(opj(recs_folder, 'ivfs_walpha'), sims_walpha, transf_d, cls_len, ftl, fel, fbl, cache=True)
 
 # ---- QE libraries from plancklens to calculate unnormalized QE (qlms) and their spectra (qcls)
 #mc_sims_bias = np.arange(0, dtype=int)
 #mc_sims_var  = np.arange(0, 60, dtype=int)
-#qlms_dd = qest.library_sepTP(opj(TEMP, 'qlms_dd'), ivfs, ivfs,   cls_len['te'], 2048, lmax_qlm=lmax_qlm)
-#qcls_dd = qecl.library(opj(TEMP, 'qcls_dd'), qlms_dd, qlms_dd, mc_sims_bias)
+#qlms_dd = qest.library_sepTP(opj(recs_folder, 'qlms_dd'), ivfs, ivfs,   cls_len['te'], 2048, lmax_qlm=lmax_qlm)
+#qcls_dd = qecl.library(opj(recs_folder, 'qcls_dd'), qlms_dd, qlms_dd, mc_sims_bias)
 
 mc_sims_bias = np.arange(0, dtype=int)
 mc_sims_var  = np.arange(0, 60, dtype=int)
 
-#qlms_dd_wcurl = qest.library_sepTP(opj(TEMP, 'qlms_dd_wcurl'), ivfs_wcurl, ivfs_wcurl,   cls_len['te'], 2048, lmax_qlm=lmax_qlm)
-#qcls_dd_wcurl = qecl.library(opj(TEMP, 'qcls_dd_wcurl'), qlms_dd_wcurl, qlms_dd_wcurl, mc_sims_bias)
+#qlms_dd_wcurl = qest.library_sepTP(opj(recs_folder, 'qlms_dd_wcurl'), ivfs_wcurl, ivfs_wcurl,   cls_len['te'], 2048, lmax_qlm=lmax_qlm)
+#qcls_dd_wcurl = qecl.library(opj(recs_folder, 'qcls_dd_wcurl'), qlms_dd_wcurl, qlms_dd_wcurl, mc_sims_bias)
 
-qlms_dd_walpha = qest.library_sepTP(opj(TEMP, 'qlms_dd_walpha'), ivfs_walpha, ivfs_walpha,   cls_len['te'], 2048, lmax_qlm=lmax_qlm)
-qcls_dd_walpha = qecl.library(opj(TEMP, 'qcls_dd_walpha'), qlms_dd_walpha, qlms_dd_walpha, mc_sims_bias)
+qlms_dd_walpha = qest.library_sepTP(opj(recs_folder, 'qlms_dd_walpha'), ivfs_walpha, ivfs_walpha,   cls_len['te'], 2048, lmax_qlm=lmax_qlm)
+qcls_dd_walpha = qecl.library(opj(recs_folder, 'qcls_dd_walpha'), qlms_dd_walpha, qlms_dd_walpha, mc_sims_bias)
 
 # -------------------------
 # This following block is only necessary if a full, Planck-like QE lensing power spectrum analysis is desired
@@ -343,11 +364,11 @@ ds_dict = { k : -1 for k in range(300)} # This remap all sim. indices to the dat
 ivfs_d_walpha = filt_util.library_shuffle(ivfs_walpha, ds_dict)
 ivfs_s_walpha = filt_util.library_shuffle(ivfs_walpha, ss_dict)
 
-qlms_ds_walpha = qest.library_sepTP(opj(TEMP, 'qlms_ds_walpha'), ivfs_walpha, ivfs_d_walpha, cls_len['te'], 2048, lmax_qlm=lmax_qlm)
-qlms_ss_walpha = qest.library_sepTP(opj(TEMP, 'qlms_ss_walpha'), ivfs_walpha, ivfs_s_walpha, cls_len['te'], 2048, lmax_qlm=lmax_qlm)
+qlms_ds_walpha = qest.library_sepTP(opj(recs_folder, 'qlms_ds_walpha'), ivfs_walpha, ivfs_d_walpha, cls_len['te'], 2048, lmax_qlm=lmax_qlm)
+qlms_ss_walpha = qest.library_sepTP(opj(recs_folder, 'qlms_ss_walpha'), ivfs_walpha, ivfs_s_walpha, cls_len['te'], 2048, lmax_qlm=lmax_qlm)
 
-qcls_ds_walpha = qecl.library(opj(TEMP, 'qcls_ds_walpha'), qlms_ds_walpha, qlms_ds_walpha, np.array([]))  # for QE RDN0 calculations
-qcls_ss_walpha = qecl.library(opj(TEMP, 'qcls_ss_walpha'), qlms_ss_walpha, qlms_ss_walpha, np.array([]))  # for QE RDN0 / MCN0 calculations
+qcls_ds_walpha = qecl.library(opj(recs_folder, 'qcls_ds_walpha'), qlms_ds_walpha, qlms_ds_walpha, np.array([]))  # for QE RDN0 calculations
+qcls_ss_walpha = qecl.library(opj(recs_folder, 'qcls_ss_walpha'), qlms_ss_walpha, qlms_ss_walpha, np.array([]))  # for QE RDN0 / MCN0 calculations
 
 
 def get_n0_iter(k='p_p'):
@@ -391,7 +412,7 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
     cff = np.copy(cls_unl_walpha['ff'][:lmax_qlm + 1]) #u is tau
     cff[:Lmin] *= 0.
-    cpf = np.copy(cls_unl_walpha['pf'][:lmax_qlm + 1])
+    cpf = np.copy(cls_unl_walpha['fp'][:lmax_qlm + 1])
     cpf[:Lmin] *= 0.
 
     # QE mean-field fed in as constant piece in the iteration steps:
@@ -470,6 +491,12 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
     Rpf_unl, Rof_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'f', cls_unl, cls_unl,
                                           {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
+    
+    Rpa_unl, Roa_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'a', cls_unl, cls_unl,
+                                          {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
+    
+    Rap_unl, Rao_unl = qresp.get_response('a' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,
+                                    {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
 
     Rfp_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,  
                                     {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]

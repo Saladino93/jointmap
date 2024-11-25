@@ -144,7 +144,7 @@ class sims_cmb_len(object):
     """
     def __init__(self, lib_dir, lmax, cls_unl, lib_pha=None, offsets_plm=None, offsets_cmbunl=None,
                  dlmax=1024, nside_lens=4096, facres=0, nbands=8, verbose=True, lmin_dlm = 2, extra_tlm = None, epsilon = 1e-7, 
-                 nocmb = False, zerolensing = False, zerobirefringence = True, zerocurl = True, zerotau = True, randomize_function = lambda x: x):
+                 nocmb = False, zerolensing = False, zerobirefringence = True, zerocurl = True, zerotau = True, randomize_function = lambda x, idx: x):
         if not os.path.exists(lib_dir) and mpi.rank == 0:
             os.makedirs(lib_dir)
         mpi.barrier()
@@ -403,19 +403,19 @@ class sims_cmb_len(object):
             print('NOTE: adding extra tlm', flush = True)
             total += hp.read_alm(extrafname)
 
-        return total
+        return self.randomize_function(total, idx)
 
     def get_sim_elm(self, idx):
         fname = os.path.join(self.lib_dir, 'sim_%04d_elm.fits' % idx)
         if not os.path.exists(fname):
             self._cache_eblm(idx)
-        return self.randomize_function(hp.read_alm(fname))
+        return self.randomize_function(hp.read_alm(fname), idx)
 
     def get_sim_blm(self, idx):
         fname = os.path.join(self.lib_dir, 'sim_%04d_blm.fits' % idx)
         if not os.path.exists(fname):
             self._cache_eblm(idx)
-        return self.randomize_function(hp.read_alm(fname))
+        return self.randomize_function(hp.read_alm(fname), idx)
 
 
 

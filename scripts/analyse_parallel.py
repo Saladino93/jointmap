@@ -45,16 +45,17 @@ bin_edges = np.arange(lmin_binning, lmax_binning, deltal_binning)
 el = (bin_edges[1:] + bin_edges[:-1]) / 2
 bin = lambda x: itu.bin_theory(x, bin_edges)[1]
 
-directory = "/users/odarwish/scratch/"
+folder_ = "JOINTRECONSTRUCTION"
+directory = f"/users/odarwish/scratch/{folder_}/"
 saving_directory = "/users/odarwish/scratch/joint_map_outputs/"
 
 nome = {"p": "plm", "f": "tau_lm", "a": "alpha_lm", "o": "alpha_lm"}
 
 def get_reconstruction_and_input(version="", qe_key="ptt_bh_s", idx=0, cmbversion=""):
-    return np.concatenate([np.load(directory + f"{cmbversion}recs/{qe_key}_sim{idx:04}{version}/{s}lm0_norm.npy") for s in selected]), [utils.alm_copy(hp.read_alm(directory+f"/{cmbversion}/simswalpha/sim_{idx:04}_{nome[s]}.fits"), lmax = lmax_qlm) for s in selected]
+    return np.concatenate([np.load(directory + f"{cmbversion}_version_{version}_recs/{qe_key}_sim{idx:04}{version}/{s}lm0_norm.npy") for s in selected]), [utils.alm_copy(hp.read_alm(directory+f"/{cmbversion}/simswalpha/sim_{idx:04}_{nome[s]}.fits"), lmax = lmax_qlm) for s in selected]
 
 def get_reconstruction_and_input_it(version="", qe_key="ptt_bh_s", idx=0, iters = [0, 1, 2, 3, 4], cmbversion = ""):
-    return statics.rec.load_plms(directory + f"{cmbversion}recs/{qe_key}_sim{idx:04}{version}/", iters), [utils.alm_copy(hp.read_alm(directory+f"/{cmbversion}/simswalpha/sim_{idx:04}_{nome[s]}.fits"), lmax = lmax_qlm) for s in selected]
+    return statics.rec.load_plms(directory + f"{cmbversion}_version_{version}_recs/{qe_key}_sim{idx:04}{version}/", iters), [utils.alm_copy(hp.read_alm(directory+f"/{cmbversion}/simswalpha/sim_{idx:04}_{nome[s]}.fits"), lmax = lmax_qlm) for s in selected]
 
 # Split simulations across MPI processes
 all_sims = np.arange(imin, imax)
@@ -135,7 +136,8 @@ if itmax >= 0:
 if rank == 0:
     total_qe = np.concatenate(total_qe)
     total_qe_cross = np.concatenate(total_qe_cross)
+    total_inputs = np.concatenate(total_inputs)
 
-    np.save(saving_directory + f"input_{version}_{cmbversion}_{imin}_{imax}_{itmax}.txt", total_inputs)
+    np.save(saving_directory + f"input_{version}_{cmbversion}_{imin}_{imax}_{itmax}", total_inputs)
     np.save(saving_directory + f"total_qe_{qe_key}_{version}_{cmbversion}_{imin}_{imax}_{itmax}", total_qe)
     np.save(saving_directory + f"total_qe_cross_{qe_key}_{version}_{cmbversion}_{imin}_{imax}_{itmax}", total_qe_cross)

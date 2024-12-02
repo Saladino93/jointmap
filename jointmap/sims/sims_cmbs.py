@@ -7,6 +7,8 @@ from plancklens.sims import cmbs, phas, maps
 from plancklens import utils
 import pickle as pk
 from lenspyx.remapping import deflection
+from lenspyx.remapping.utils_geom import Geom
+from lenspyx import cachers
 
 verbose = False
 
@@ -59,6 +61,7 @@ class sims_cmb_unlensed(object):
 
         self.lmax = lmax
         self.dlmax = dlmax
+        self.lmax_unl = lmax + dlmax
         # lenspyx parameters:
         self.nside_lens = nside_lens
         self.nbands = nbands
@@ -143,7 +146,7 @@ class sims_cmb_len(object):
             verbose(defaults to True): lenspyx timing info printout
     """
     def __init__(self, lib_dir, lmax, cls_unl, lib_pha=None, offsets_plm=None, offsets_cmbunl=None,
-                 dlmax=1024, nside_lens=4096, facres=0, nbands=8, verbose=True, lmin_dlm = 2, extra_tlm = None, epsilon = 1e-7, 
+                 dlmax=1024, nside_lens=4096, facres=0, nbands=8, verbose=True, lmin_dlm = 2, extra_tlm = None, epsilon = 1e-8, 
                  nocmb = False, zerolensing = False, zerobirefringence = True, zerocurl = True, zerotau = True, randomize_function = lambda x, idx: x):
         if not os.path.exists(lib_dir) and mpi.rank == 0:
             os.makedirs(lib_dir)
@@ -160,6 +163,8 @@ class sims_cmb_len(object):
 
         self.lmax = lmax
         self.dlmax = dlmax
+        self.lmax_unl = lmax + dlmax
+        self.dlmax_gl = 1024
         # lenspyx parameters:
         self.nside_lens = nside_lens
         self.nbands = nbands
@@ -308,6 +313,14 @@ class sims_cmb_len(object):
         Q *= exp
         U *= exp
         return Q, U
+
+
+    def _get_f(self, idx):
+        dlm, dclm, lmax_dlm, mmax_dlm = self._get_dlm(idx)
+        lenjob_geometry = Geom.get_thingauss_geometry(self.lmax_unl + self.dlmax_gl, 2)
+        f = deflection(lenjob_geometry, dlm, mmax_dlm, cacher=cachers.cacher_mem(safe=False), dclm=dclm,
+                       epsilon=self.epsilon)
+        return f
         
     
     def _cache_eblm(self, idx):
@@ -337,11 +350,18 @@ class sims_cmb_len(object):
             del Q, U
 
         if not self.zerolensing:
-            dlm, dclm, _, _ = self._get_dlm(idx)
-            lmax_map = hp.Alm.getlmax(elm.size)
-            Qlen, Ulen = self.lens_module.alm2lenmap_spin([elm, blm], [dlm, dclm], 2, geometry = ('healpix', {'nside': self.nside_lens}), epsilon = self.epsilon, verbose = 0)
-            elm, blm = hp.map2alm_spin([Qlen, Ulen], 2, lmax=lmax_map)
-            del Qlen, Ulen
+            if True:
+                dlm, dclm, _, _ = self._get_dlm(idx)
+                lmax_map = hp.Alm.getlmax(elm.size)
+                Qlen, Ulen = self.lens_module.alm2lenmap_spin([elm, blm], [dlm, dclm], 2, geometry = ('healpix', {'nside': self.nside_lens}), epsilon = self.epsilon, verbose = 0)
+                elm, blm = hp.map2alm_spin([Qlen, Ulen], 2, lmax=lmax_map)
+                del Qlen, Ulen
+            else:
+                f = self._get_f(idx)
+                eblm = np.array([elm, blm])
+                eblm = f.lensgclm(eblm, self.lmax_unl, 2, self.lmax, self.lmax)
+                elm, blm = eblm
+
 
         elm = utils.alm_copy(elm, self.lmax)
         blm = utils.alm_copy(blm, self.lmax)

@@ -92,7 +92,7 @@ parser.add_argument('-Lmin', dest='Lmin', type=int, default=1, help='Lmin recons
 
 parser.add_argument('-lmin_tlm', dest='lmin_tlm', type=int, default=1, help='lmin_tlm')
 parser.add_argument('-lmin_elm', dest='lmin_elm', type=int, default=2, help='lmin_elm')
-parser.add_argument('-lmin_blm', dest='lmin_blm', type=int, default=2, help='lmin_blm')
+parser.add_argument('-lmin_blm', dest='lmin_blm', type=int, default=200, help='lmin_blm')
 
 parser.add_argument('-lmax_ivf', dest='lmax_ivf', type=int, default=4096, help='lmax_ivf')
 parser.add_argument('-mmax_ivf', dest='mmax_ivf', type=int, default=4096, help='mmax_ivf')
@@ -183,14 +183,6 @@ recs_folder = TEMP+f"_version_{args.v}_recs"
 libdir_iterators = lambda qe_key, simidx, version: opj(recs_folder,'%s_sim%04d'%(qe_key, simidx) + version)
 #------------------
 
-# Fiducial CMB spectra for QE and iterative reconstructions
-# (here we use very lightly suboptimal lensed spectra QE weights)
-"""cls_path = opj(os.path.dirname(plancklens.__file__), 'data', 'cls')
-cls_unl = utils.camb_clfile(opj(cls_path, 'FFP10_wdipole_lenspotentialCls.dat'))
-cls_len = utils.camb_clfile(opj(cls_path, 'FFP10_wdipole_lensedCls.dat'))
-cls_unl_wcurl = utils.camb_clfile(opj(cls_path, 'FFP10_wdipole_lenspotentialCls.dat'))
-cls_unl_wcurl['oo'] = np.loadtxt(opj(cls_path, 'FFP10_fieldrotationCls.dat')) # lensing curl potential
-gradcls = utils.camb_clfile(opj(cls_path, 'FFP10_wdipole_gradlensedCls.dat'))"""
 
 def camb_clfile_gradient(fname, lmax=None):
     """CAMB spectra (lenspotentialCls, lensedCls or tensCls types) returned as a dict of numpy arrays.
@@ -209,8 +201,11 @@ def camb_clfile_gradient(fname, lmax=None):
         cls[k][ell[idc]] = cols[i + 1][idc] / w[idc]
     return cls
 
+import copy
+
+
+#"""
 cls_path = opj(os.environ['HOME'], 'fgcmblensing', 'input', 'giulio')
-#cls_path = opj("/Users/omard/Downloads/", 'giulio')
 cls_unl = utils.camb_clfile(opj(cls_path, 'lensedCMB_dmn1_lenspotentialCls.dat'))
 cls_len = utils.camb_clfile(opj(cls_path, 'lensedCMB_dmn1_lensedCls.dat'))
 cls_grad = camb_clfile_gradient(opj(cls_path, 'lensedCMB_dmn1_lensedgradCls.dat'))
@@ -218,13 +213,28 @@ cls_grad = camb_clfile_gradient(opj(cls_path, 'lensedCMB_dmn1_lensedgradCls.dat'
 cls_unl_wcurl = utils.camb_clfile(opj(cls_path, 'lensedCMB_dmn1_lenspotentialCls.dat'))
 cls_rot = np.loadtxt(opj(cls_path, 'new_lensedCMB_dmn1_field_rotation_power.dat')).T[1]
 
-import copy
 
 ls = np.arange(cls_rot.size)
 factor = cli(ls*(ls+1)/2)
 cls_unl_wcurl["oo"] = cls_rot*factor**2.
 
+#"""
+
+
+# Fiducial CMB spectra for QE and iterative reconstructions
+# (here we use very lightly suboptimal lensed spectra QE weights)
+"""
+cls_path = opj(os.path.dirname(plancklens.__file__), 'data', 'cls')
+cls_unl = utils.camb_clfile(opj(cls_path, 'FFP10_wdipole_lenspotentialCls.dat'))
+cls_len = utils.camb_clfile(opj(cls_path, 'FFP10_wdipole_lensedCls.dat'))
+cls_unl_wcurl = utils.camb_clfile(opj(cls_path, 'FFP10_wdipole_lenspotentialCls.dat'))
+cls_unl_wcurl['oo'] = np.loadtxt(opj(cls_path, 'FFP10_fieldrotationCls.dat')) # lensing curl potential
+cls_grad = utils.camb_clfile(opj(cls_path, 'FFP10_wdipole_gradlensedCls.dat'))
+"""
+
 cls_unl_walpha = copy.deepcopy(cls_unl_wcurl)
+
+
 
 Nelements = 7999
 for k, v in cls_unl_walpha.items():
@@ -423,38 +433,45 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     mf_sims = np.unique(mc_sims_mf_it0 if not 'noMF' in version else np.array([]))
     mf0_p = qlms_dd_QE.get_sim_qlm_mf('p' + k[1:], mf_sims)  # Mean-field to subtract on the first iteration:
     mf0_o = qlms_dd_QE.get_sim_qlm_mf('x' + k[1:], mf_sims)  # Mean-field to subtract on the first iteration:
-    mf0_a = qlms_dd_QE.get_sim_qlm_mf('a' + k[1:], mf_sims)  # Mean-field to subtract on the first iteration:
-    mf0_f = qlms_dd_QE.get_sim_qlm_mf('f' + k[1:], mf_sims)  # Mean-field to subtract on the first iteration:
+    condition = (k == 'p_p')
+    if condition:
+        mf0_a = qlms_dd_QE.get_sim_qlm_mf('a' + k[1:], mf_sims)  # Mean-field to subtract on the first iteration:
+        mf0_f = qlms_dd_QE.get_sim_qlm_mf('f' + k[1:], mf_sims)  # Mean-field to subtract on the first iteration:
 
 
     if simidx in mf_sims:  # We dont want to include the sim we consider in the mean-field...
         Nmf = len(mf_sims)
         mf0_p = (mf0_p - qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx)) / Nmf) * (Nmf / (Nmf - 1))
         mf0_o = (mf0_o - qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx)) / Nmf) * (Nmf / (Nmf - 1))
-        mf0_a = (mf0_a - qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx)) / Nmf) * (Nmf / (Nmf - 1))
-        mf0_f = (mf0_f - qlms_dd_QE.get_sim_qlm('f' + k[1:], int(simidx)) / Nmf) * (Nmf / (Nmf - 1))
+        if condition:
+            mf0_a = (mf0_a - qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx)) / Nmf) * (Nmf / (Nmf - 1))
+            mf0_f = (mf0_f - qlms_dd_QE.get_sim_qlm('f' + k[1:], int(simidx)) / Nmf) * (Nmf / (Nmf - 1))
 
     plm0 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx)) - mf0_p  # Unormalized quadratic estimate:
     olm0 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx)) - mf0_o  # Unormalized quadratic estimate:
-    alm0 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx)) - mf0_a  # Unormalized quadratic estimate:
-    flm0 = qlms_dd_QE.get_sim_qlm('f' + k[1:], int(simidx)) - mf0_f  # Unormalized quadratic estimate:
+    if condition:
+        alm0 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx)) - mf0_a  # Unormalized quadratic estimate:
+        flm0 = qlms_dd_QE.get_sim_qlm('f' + k[1:], int(simidx)) - mf0_f  # Unormalized quadratic estimate:
 
     # Isotropic normalization of the QE
 
-    Rpp, Roo = qresp.get_response('p' + k[1:], lmax_ivf, 'p', cls_len, cls_len, {'e': fel, 'b': fbl, 't': ftl},
+    #NOTE: cls_grad!!!!
+    Rpp, Roo = qresp.get_response('p' + k[1:], lmax_ivf, 'p', cls_len, cls_grad, {'e': fel, 'b': fbl, 't': ftl},
                                   lmax_qlm=lmax_qlm)[0:2]
     
-    Raa = qresp.get_response('a' + k[1:], lmax_ivf, 'a', cls_len, cls_len, {'e': fel, 'b': fbl, 't': ftl},
-                                lmax_qlm=lmax_qlm)[0]
-    
-    Rff = qresp.get_response('f' + k[1:], lmax_ivf, 'f', cls_len, cls_len, {'e': fel, 'b': fbl, 't': ftl},
-                                lmax_qlm=lmax_qlm)[0]
+    if condition:
+        Raa = qresp.get_response('a' + k[1:], lmax_ivf, 'a', cls_len, cls_grad, {'e': fel, 'b': fbl, 't': ftl},
+                                    lmax_qlm=lmax_qlm)[0]
+        
+        Rff = qresp.get_response('f' + k[1:], lmax_ivf, 'f', cls_len, cls_grad, {'e': fel, 'b': fbl, 't': ftl},
+                                    lmax_qlm=lmax_qlm)[0]
     
     # Isotropic Wiener-filter (here assuming for simplicity N0 ~ 1/R)
     WF_p = cpp * utils.cli(cpp + utils.cli(Rpp))
     WF_o = coo * utils.cli(coo + utils.cli(Roo))
-    WF_a = caa * utils.cli(caa + utils.cli(Raa))
-    WF_f = cff * utils.cli(cff + utils.cli(Rff)) #is this the correct Wf in the presence of a cross-corr between tau and phi?
+    if condition:
+        WF_a = caa * utils.cli(caa + utils.cli(Raa))
+        WF_f = cff * utils.cli(cff + utils.cli(Rff)) #is this the correct Wf in the presence of a cross-corr between tau and phi?
 
     plm0 = alm_copy(plm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
     almxfl(plm0, utils.cli(Rpp), mmax_qlm, True)  # Normalized QE
@@ -468,40 +485,42 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     almxfl(olm0, WF_o, mmax_qlm, True)  # Wiener-filter QE assuming the curl signal is the expected one
     almxfl(olm0, coo > 0, mmax_qlm, True)
 
-    alm0 = alm_copy(alm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
-    almxfl(alm0, utils.cli(Raa), mmax_qlm, True)  # Normalized QE
-    np.save(libdir_iterator+"/alm0_norm.npy", alm0)
-    almxfl(alm0, WF_a, mmax_qlm, True)  # Wiener-filter QE
-    almxfl(alm0, caa > 0, mmax_qlm, True)
+    if condition:
+        alm0 = alm_copy(alm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
+        almxfl(alm0, utils.cli(Raa), mmax_qlm, True)  # Normalized QE
+        np.save(libdir_iterator+"/alm0_norm.npy", alm0)
+        almxfl(alm0, WF_a, mmax_qlm, True)  # Wiener-filter QE
+        almxfl(alm0, caa > 0, mmax_qlm, True)
 
-    flm0 = alm_copy(flm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
-    almxfl(flm0, utils.cli(Rff), mmax_qlm, True)  # Normalized QE
-    np.save(libdir_iterator+"/flm0_norm.npy", flm0)
-    almxfl(flm0, WF_f, mmax_qlm, True)  # Wiener-filter QE
-    almxfl(flm0, cff > 0, mmax_qlm, True)
+        flm0 = alm_copy(flm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
+        almxfl(flm0, utils.cli(Rff), mmax_qlm, True)  # Normalized QE
+        np.save(libdir_iterator+"/flm0_norm.npy", flm0)
+        almxfl(flm0, WF_f, mmax_qlm, True)  # Wiener-filter QE
+        almxfl(flm0, cff > 0, mmax_qlm, True)
 
     Rpp_unl, Roo_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,
                                           {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
 
-    Raa_unl = qresp.get_response('a' + k[1:], lmax_ivf, 'a', cls_unl, cls_unl,
-                                    {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
-    
-    Rff_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'f', cls_unl, cls_unl,
-                                    {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
+    if condition:
+        Raa_unl = qresp.get_response('a' + k[1:], lmax_ivf, 'a', cls_unl, cls_unl,
+                                        {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
+        
+        Rff_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'f', cls_unl, cls_unl,
+                                        {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
 
-    Rpf_unl, Rof_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'f', cls_unl, cls_unl,
-                                          {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
-    
-    Rpa_unl, Roa_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'a', cls_unl, cls_unl,
-                                          {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
-    
-    Rap_unl, Rao_unl = qresp.get_response('a' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,
-                                    {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
+        Rpf_unl, Rof_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'f', cls_unl, cls_unl,
+                                            {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
+        
+        Rpa_unl, Roa_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'a', cls_unl, cls_unl,
+                                            {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
+        
+        Rap_unl, Rao_unl = qresp.get_response('a' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,
+                                        {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
 
-    Rfp_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,  
-                                    {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
+        Rfp_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,  
+                                        {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
 
-    print("Rfp_unl", Rfp_unl.shape)
+        print("Rfp_unl", Rfp_unl.shape)
     
     # Lensing deflection field instance (initiated here with zero deflection)
 
@@ -511,9 +530,14 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     #then create matrices
     names = ["p", "a", "o", "f"]
 
-    signal_dictionary = {"pp": cpp, "oo": coo, "aa": caa, "pf": cpf*0, "ff": cff}
-    response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "pf": Rfp_unl, "pf": Rpf_unl, "ff": Rff_unl}
-    
+    if condition:
+        signal_dictionary = {"pp": cpp, "oo": coo, "aa": caa, "pf": cpf*0, "ff": cff}
+        response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "pf": Rfp_unl, "pf": Rpf_unl, "ff": Rff_unl}
+    else:
+        signal_dictionary = {"pp": cpp, "oo": coo}
+        response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl}
+
+        
     Nselected = len(selected)
 
     signal_matrix = np.zeros((cpp.size, Nselected, Nselected))
@@ -534,7 +558,7 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
             #elif key[::-1] in response_dictionary.keys():
             #    response_matrix[..., i, j] = response_dictionary[key[::-1]]
 
-    non_zero = (cpp>0)
+    non_zero = (cpp>0)*(coo>0)
     inv_signal_matrix = np.zeros_like(signal_matrix)
     inv_signal_matrix[non_zero, ...] = np.linalg.inv(signal_matrix[non_zero, ...])
 
@@ -556,7 +580,10 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     hh_h0 = cli(Rpp_unl[:lmax_qlm + 1] + cli(chh))  #~ (1/Cpp + 1/N0)^-1
     hh_h0 *= (chh > 0)
 
-    starting_points_dictionary = {"p": plm0, "a": alm0, "o": olm0, "f": flm0}
+    if condition:
+        starting_points_dictionary = {"p": plm0, "a": alm0, "o": olm0, "f": flm0}
+    else:
+        starting_points_dictionary = {"p": plm0, "a": alm0}
 
     plm0 = np.concatenate([starting_points_dictionary[key] for key in selected])
     

@@ -26,6 +26,7 @@ parser.add_argument('--lmin_binning', type=int, default = 20)
 parser.add_argument('--lmax_binning', type=int, default = 4000)
 parser.add_argument('--deltal_binning', type=int, default = 40)
 parser.add_argument('--selected', dest='selected', nargs='+',  default = "a", help="List of selected estimators, separated by spaces.")
+parser.add_argument('--unlensed', action='store_true')
 
 args = parser.parse_args()
 qe_key = args.qe_key
@@ -40,6 +41,9 @@ lmin_binning = args.lmin_binning
 lmax_binning = args.lmax_binning
 deltal_binning = args.deltal_binning
 selected = args.selected
+unlensed = args.unlensed
+
+print("Selected estimators", selected)
 
 bin_edges = np.arange(lmin_binning, lmax_binning, deltal_binning)
 el = (bin_edges[1:] + bin_edges[:-1]) / 2
@@ -49,13 +53,22 @@ folder_ = "JOINTRECONSTRUCTION"
 directory = f"/users/odarwish/scratch/{folder_}/"
 saving_directory = "/users/odarwish/scratch/joint_map_outputs/"
 
-nome = {"p": "plm", "f": "tau_lm", "a": "alpha_lm", "o": "alpha_lm"}
+nome = {"p": "plm", "f": "tau_lm", "a": "alpha_lm", "o": "alpha_lm" if "a" in selected else "olm"}
+nome = {"p": "plm", "f": "tau_lm", "a": "alpha_lm", "o": "alpha_lm" if "a" in selected else "plm"}
+
+
+size_mappa = hp.Alm.getsize(lmax_qlm)
+
+def get_input(directory, cmbversion, idx, lmax_qlm):
+    if unlensed:
+        return [np.zeros(size_mappa, dtype=complex) for s in selected]
+    return [utils.alm_copy(hp.read_alm(directory+f"/{cmbversion}/simswalpha/sim_{idx:04}_{nome[s]}.fits"), lmax = lmax_qlm) for s in selected]
 
 def get_reconstruction_and_input(version="", qe_key="ptt_bh_s", idx=0, cmbversion=""):
-    return np.concatenate([np.load(directory + f"{cmbversion}_version_{version}_recs/{qe_key}_sim{idx:04}{version}/{s}lm0_norm.npy") for s in selected]), [utils.alm_copy(hp.read_alm(directory+f"/{cmbversion}/simswalpha/sim_{idx:04}_{nome[s]}.fits"), lmax = lmax_qlm) for s in selected]
+    return np.concatenate([np.load(directory + f"{cmbversion}_version_{version}_recs/{qe_key}_sim{idx:04}{version}/{s}lm0_norm.npy") for s in selected]), get_input(directory, cmbversion, idx, lmax_qlm)
 
 def get_reconstruction_and_input_it(version="", qe_key="ptt_bh_s", idx=0, iters = [0, 1, 2, 3, 4], cmbversion = ""):
-    return statics.rec.load_plms(directory + f"{cmbversion}_version_{version}_recs/{qe_key}_sim{idx:04}{version}/", iters), [utils.alm_copy(hp.read_alm(directory+f"/{cmbversion}/simswalpha/sim_{idx:04}_{nome[s]}.fits"), lmax = lmax_qlm) for s in selected]
+    return statics.rec.load_plms(directory + f"{cmbversion}_version_{version}_recs/{qe_key}_sim{idx:04}{version}/", iters), get_input(directory, cmbversion, idx, lmax_qlm)
 
 # Split simulations across MPI processes
 all_sims = np.arange(imin, imax)

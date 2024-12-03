@@ -101,7 +101,7 @@ def bin_theory(cl, bin_edges):
     return el, cl
 
 
-bin_edges = np.arange(10, 4000, 60)
+bin_edges = np.arange(10, 4000, 40)
 
 
 def cross_corr_coeff(a, b, base=0, color=None, plot=True, ax=None, label=None):
@@ -113,7 +113,7 @@ def cross_corr_coeff(a, b, base=0, color=None, plot=True, ax=None, label=None):
     xcorr = x**2 / (aa * bb)
     if plot and ax is not None:
         ax.plot(el, xcorr - base, color=color, label=label)
-    return xcorr
+    return el, xcorr
 
 
 # Function to load configuration
@@ -170,13 +170,16 @@ def plot_configs_with_class(config_paths, subset_selected, itrs, outname):
 
             for idx, itr in enumerate(itrs):  # Iterate over iterations
                 splits = np.split(plms[idx], len(selected))
-                cross = cross_corr_coeff(splits[original_idx], inputs[k], plot=False)
-                plot.add_curve(range(len(cross)), cross, label=f"itr {itr}", row=i, col=j)
+                el, cross = cross_corr_coeff(splits[original_idx], inputs[k], plot=False)
+                plot.add_curve(el, cross, label=f"itr {itr}", row=i, col=j)
 
             plot.set_labels(xlabel=r"$L$", ylabel=r"$\rho_L$" + f" ({names_fields[k]})", row=i, col=j)
-            plot.set_title(title, row=i, col=j)
-            plot.set_scale(xscale="log", row=i, col=j)
-            plot.set_legend(row=i, col=j)
+
+            #plot.set_scale(xscale="log", row=i, col=j)
+            if i == 0:
+                plot.set_title(title, row=i, col=j)
+                if j == 0:
+                    plot.set_legend(row=i, col=j, fontsize = 10)
 
     plot.save_plot(outname, dpi=300)
     plot.show_plot()

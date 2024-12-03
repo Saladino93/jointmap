@@ -109,8 +109,16 @@ args = parser.parse_args()
 
 randomize_function = (lambda x, idx: x) if not args.randomize else randomizing_fg
 
+def process_strings(strings):
+    return list(map(lambda s: s[0] if len(s) == 2 else s, strings)), list(map(lambda s: len(s) == 2, strings))
+
 selected = args.selected
-print("Selected estimators", selected)
+selected, disabled = process_strings(selected)
+disabled_dict = dict(zip(selected, disabled))
+disable_function = (lambda x: disabled_dict[x] if x in disabled_dict else False)
+
+print("Selected estimators (disabled operator?)", disabled_dict)
+
 
 lmax_qlm, mmax_qlm = args.lmax_qlm, args.mmax_qlm # Lensing map is reconstructed down to this lmax and mmax
 lmax_unl, mmax_unl = args.lmax_unl, args.mmax_unl  # Delensed CMB is reconstructed down to this lmax and mmax
@@ -591,17 +599,17 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     if k in ['p_p']:
         if joint_module:
             
-            LensingOp = secondaries.Lensing(name = "p", lmax = ffi.lmax_dlm, mmax = ffi.mmax_dlm, sht_tr = tr)
+            LensingOp = secondaries.Lensing(name = "p", lmax = ffi.lmax_dlm, mmax = ffi.mmax_dlm, sht_tr = tr, disable = disable_function("p"))
             LensingOp.set_field(ffi)
 
-            CurlLensingOp = secondaries.Lensing(name = "o", lmax = ffi.lmax_dlm, mmax = ffi.mmax_dlm, sht_tr = tr)
+            CurlLensingOp = secondaries.Lensing(name = "o", lmax = ffi.lmax_dlm, mmax = ffi.mmax_dlm, sht_tr = tr, disable = disable_function("o"))
             CurlLensingOp.set_field(ffi)
 
-            RotationOp = secondaries.Rotation(name = "a", lmax = lmax_qlm, mmax = mmax_qlm, sht_tr = tr)
+            RotationOp = secondaries.Rotation(name = "a", lmax = lmax_qlm, mmax = mmax_qlm, sht_tr = tr, disable = disable_function("a"))
             alpha_map = ninv_geom.synthesis(plm0, spin = 0, lmax = lmax_qlm, mmax = mmax_qlm, nthreads = 128).squeeze()
             RotationOp.set_field(np.zeros_like(alpha_map))
 
-            PatchyTauOp = secondaries.PatchyTau(name = "f", lmax = ffi.lmax_dlm, mmax = ffi.mmax_dlm, sht_tr = tr)
+            PatchyTauOp = secondaries.PatchyTau(name = "f", lmax = ffi.lmax_dlm, mmax = ffi.mmax_dlm, sht_tr = tr, disable = disable_function("f"))
             PatchyTauOp.set_field(np.zeros_like(alpha_map))
 
             operators_dictionary = {"p": LensingOp, "o": CurlLensingOp, "a": RotationOp, "f": PatchyTauOp}
@@ -664,8 +672,9 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
                                  wflm0=wflm0)
 
     else: # standard gradient only
-        stepper = steps.harmonicbump(lmax_qlm, mmax_qlm, xa=400, xb=1500)  # reduce the gradient by 0.5 for large scale and by 0.1 for small scales to improve convergence in regimes where the deflection field is not invertible
-        #stepper = utils_steps.nrstep(lmax_qlm, mmax_qlm, val = step_val)
+        stepper = steps.harmonicbump(lmax_qlm, mmax_qlm, xa=400, xb=1500, a = 0.5, b = 0.1, scale = 50)  # reduce the gradient by 0.5 for large scale and by 0.1 for small scales to improve convergence in regimes where the deflection field is not invertible
+        step_val = 0.1
+        #stepper = steps.nrstep(lmax_qlm, mmax_qlm, val = step_val)
         
         if joint_module:
             iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,

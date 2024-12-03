@@ -54,6 +54,8 @@ from jointmap.sims.sims_cmbs import sims_cmb_len
 import healpy as hp
 
 import argparse
+from types import SimpleNamespace
+import yaml
 
 def fg_phases(mappa: np.ndarray, seed: int = 0):
      np.random.seed(seed)
@@ -66,6 +68,7 @@ def randomizing_fg(mappa: np.ndarray, seed: int = 0):
      return f(mappa)
 
 parser = argparse.ArgumentParser(description='test iterator full-sky with pert. resp.')
+parser.add_argument("-c", "--config", type=str, help="Path to configuration file", default=None)
 parser.add_argument('-k', dest='k', type=str, default='p_p', help='rec. type')
 parser.add_argument('-itmax', dest='itmax', type=int, default=-1, help='maximal iter index')
 parser.add_argument('-tol', dest='tol', type=float, default=6., help='-log10 of cg tolerance default')
@@ -105,6 +108,15 @@ parser.add_argument('-selected', dest='selected', nargs='+',  default = "a", hel
 parser.add_argument('-randomize', dest = 'randomize', action = 'store_true', help = 'randomize the estimators')
 
 args = parser.parse_args()
+
+config = {}
+if args.config:
+    with open(args.config, 'r') as file:
+        config = yaml.safe_load(file)
+
+merged_args = {**vars(args), **config}
+
+args = SimpleNamespace(**merged_args)
 
 
 randomize_function = (lambda x, idx: x) if not args.randomize else randomizing_fg

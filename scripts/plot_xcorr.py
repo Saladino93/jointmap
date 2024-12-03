@@ -101,7 +101,7 @@ def bin_theory(cl, bin_edges):
     return el, cl
 
 
-bin_edges = np.arange(10, 4000, 40)
+bin_edges = np.arange(10, 4000, 20)
 
 
 def cross_corr_coeff(a, b, base=0, color=None, plot=True, ax=None, label=None):
@@ -171,11 +171,11 @@ def plot_configs_with_class(config_paths, subset_selected, itrs, outname):
             for idx, itr in enumerate(itrs):  # Iterate over iterations
                 splits = np.split(plms[idx], len(selected))
                 el, cross = cross_corr_coeff(splits[original_idx], inputs[k], plot=False)
-                plot.add_curve(el, cross, label=f"itr {itr}", row=i, col=j)
+                plot.add_curve(el, cross, label=f"itr {itr}", row=i, col=j, linewidth = 1.5)
 
             plot.set_labels(xlabel=r"$L$", ylabel=r"$\rho_L$" + f" ({names_fields[k]})", row=i, col=j)
 
-            #plot.set_scale(xscale="log", row=i, col=j)
+            plot.set_scale(xscale="log", row=i, col=j)
             if i == 0:
                 plot.set_title(title, row=i, col=j)
                 if j == 0:

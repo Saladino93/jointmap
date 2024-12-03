@@ -28,7 +28,7 @@ class CMBLensingPlot:
         for ax in self.axes.flat:
             ax.tick_params(axis='both', which='major', labelsize=20)
             for spine in ax.spines.values():
-                spine.set_linewidth(2.5)
+                spine.set_linewidth(1.5)
             ax.set_facecolor('#f8f9fa')
             ax.grid(True, linestyle='--', alpha=0.6)
 
@@ -54,8 +54,8 @@ class CMBLensingPlot:
         legend = ax.legend(fontsize=fontsize, loc=loc, frameon=True,
                            edgecolor='black', facecolor='white', framealpha=0.8,
                            ncol=ncol, bbox_to_anchor=bbox_to_anchor)
-        legend.get_frame().set_boxstyle('round,pad=0.5')
-        legend.get_frame().set_linewidth(1.5)
+        #legend.get_frame().set_boxstyle('round,pad=0.5')
+        legend.get_frame().set_linewidth(1.)
 
     def set_title(self, title, row=0, col=0, fontsize=24):
         self.axes[row, col].set_title(title, fontsize=fontsize, pad=20)

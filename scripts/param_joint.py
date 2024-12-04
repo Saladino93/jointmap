@@ -119,7 +119,7 @@ merged_args = {**vars(args), **config}
 args = SimpleNamespace(**merged_args)
 
 
-randomize_function = (lambda x, idx: x) if not args.randomize else randomizing_fg
+randomize_function = (lambda x, idx: x) #if not args.randomize else randomizing_fg
 
 def process_strings(strings):
     return list(map(lambda s: s[0] if len(s) == 2 else s, strings)), list(map(lambda s: len(s) == 2, strings))
@@ -362,6 +362,7 @@ mc_sims_var  = np.arange(0, 60, dtype=int)
 #qlms_dd_wcurl = qest.library_sepTP(opj(recs_folder, 'qlms_dd_wcurl'), ivfs_wcurl, ivfs_wcurl,   cls_len['te'], 2048, lmax_qlm=lmax_qlm)
 #qcls_dd_wcurl = qecl.library(opj(recs_folder, 'qcls_dd_wcurl'), qlms_dd_wcurl, qlms_dd_wcurl, mc_sims_bias)
 
+#library_jtTP
 qlms_dd_walpha = qest.library_sepTP(opj(recs_folder, 'qlms_dd_walpha'), ivfs_walpha, ivfs_walpha,   cls_len['te'], 2048, lmax_qlm=lmax_qlm)
 qcls_dd_walpha = qecl.library(opj(recs_folder, 'qcls_dd_walpha'), qlms_dd_walpha, qlms_dd_walpha, mc_sims_bias)
 
@@ -499,11 +500,33 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     almxfl(plm0, WF_p, mmax_qlm, True)  # Wiener-filter QE
     almxfl(plm0, cpp > 0, mmax_qlm, True)
 
+    def process_xlm0(xlm0, Rxx, Wxx, cxx, nome):
+        xlm0 = alm_copy(xlm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
+        almxfl(xlm0, utils.cli(Rxx), mmax_qlm, True)  # Normalized QE
+        np.save(libdir_iterator+f"/{nome}.npy", xlm0)
+        almxfl(xlm0, Wxx, mmax_qlm, True)  # Wiener-filter QE
+        almxfl(xlm0, cxx > 0, mmax_qlm, True)
+        return xlm0
+
+
+    shift_1, shift_2 = 1000, 2000
+    plm0_12 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_2) - mf0_p
+    plm0_21 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_1) - mf0_p
+    plm0_12 = process_xlm0(plm0_12, Rpp, WF_p, cpp > 0, "plm0_12")
+    plm0_21 = process_xlm0(plm0_21, Rpp, WF_p, cpp > 0, "plm0_21")
+
+
     olm0 = alm_copy(olm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
     almxfl(olm0, utils.cli(Roo), mmax_qlm, True)  # Normalized QE
     np.save(libdir_iterator+"/olm0_norm.npy", olm0)
     almxfl(olm0, WF_o, mmax_qlm, True)  # Wiener-filter QE assuming the curl signal is the expected one
     almxfl(olm0, coo > 0, mmax_qlm, True)
+
+    olm0_12 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_2) - mf0_o
+    olm0_21 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_1) - mf0_o
+    olm0_12 = process_xlm0(olm0_12, Roo, WF_o, coo > 0, "olm0_12")
+    olm0_21 = process_xlm0(olm0_21, Roo, WF_o, coo > 0, "olm0_21")
+
 
     if condition:
         alm0 = alm_copy(alm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
@@ -512,11 +535,21 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
         almxfl(alm0, WF_a, mmax_qlm, True)  # Wiener-filter QE
         almxfl(alm0, caa > 0, mmax_qlm, True)
 
+        alm0_12 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_2) - mf0_p
+        alm0_21 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_1) - mf0_p
+        alm0_12 = process_xlm0(alm0_12, Raa, WF_a, cpp > 0, "alm0_12")
+        alm0_21 = process_xlm0(alm0_21, Raa, WF_a, cpp > 0, "alm0_21")
+
         flm0 = alm_copy(flm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
         almxfl(flm0, utils.cli(Rff), mmax_qlm, True)  # Normalized QE
         np.save(libdir_iterator+"/flm0_norm.npy", flm0)
         almxfl(flm0, WF_f, mmax_qlm, True)  # Wiener-filter QE
         almxfl(flm0, cff > 0, mmax_qlm, True)
+
+        flm0_12 = qlms_dd_QE.get_sim_qlm('f' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_2) - mf0_p
+        flm0_21 = qlms_dd_QE.get_sim_qlm('f' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_1) - mf0_p
+        flm0_12 = process_xlm0(flm0_12, Raa, WF_a, cpp > 0, "flm0_12")
+        flm0_21 = process_xlm0(flm0_21, Raa, WF_a, cpp > 0, "flm0_21")
 
     Rpp_unl, Roo_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,
                                           {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
@@ -600,14 +633,28 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     hh_h0 = cli(Rpp_unl[:lmax_qlm + 1] + cli(chh))  #~ (1/Cpp + 1/N0)^-1
     hh_h0 *= (chh > 0)
 
+
+    doshift = True
+
     if condition:
         starting_points_dictionary = {"p": plm0, "a": alm0, "o": olm0, "f": flm0}
+        if doshift:
+            starting_points_dictionary_12 = {"p": plm0_12, "a": alm0_12, "o": olm0_12, "f": flm0_12}
+            starting_points_dictionary_21 = {"p": plm0_21, "a": alm0_21, "o": olm0_21, "f": flm0_21}
     else:
         starting_points_dictionary = {"p": plm0, "a": alm0}
+        starting_points_dictionary_12 = {"p": plm0_12, "a": alm0_12}
+        starting_points_dictionary_21 = {"p": plm0_21, "a": alm0_21}
 
     plm0 = np.concatenate([starting_points_dictionary[key] for key in selected])
-    
 
+    if doshift:
+        plm0_12 = np.concatenate([starting_points_dictionary_12[key] for key in selected])
+        plm0_21 = np.concatenate([starting_points_dictionary_21[key] for key in selected])
+    else:
+        plm0_12 = None
+        plm0_21 = None
+    
     if k in ['p_p']:
         if joint_module:
             
@@ -691,7 +738,8 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
         if joint_module:
             iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,
                 plm0, plm0 * 0, Rpp_unl, cpp, cls_unl, filtr, k_geom, chain_descrs(lmax_unl, cg_tol), stepper
-                , wflm0=lambda : alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl), pp_h0s_matrix = pp_h0s_matrix, inv_signal_matrix = inv_signal_matrix)
+                , wflm0=lambda : alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl), 
+                pp_h0s_matrix = pp_h0s_matrix, inv_signal_matrix = inv_signal_matrix, plm0_12 = plm0_12, plm0_21 = plm0_21)
         else:
             iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,
                 plm0, plm0 * 0, Rpp_unl, cpp, cls_unl, filtr, k_geom, chain_descrs(lmax_unl, cg_tol), stepper

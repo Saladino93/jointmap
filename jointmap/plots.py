@@ -26,7 +26,7 @@ class CMBLensingPlot:
     def setup_plot(self):
         plt.rcParams['font.family'] = 'Latin Modern Mono Light'
         for ax in self.axes.flat:
-            ax.tick_params(axis='both', which='major', labelsize=20)
+            ax.tick_params(axis='both', which='major', labelsize=15)
             for spine in ax.spines.values():
                 spine.set_linewidth(1.5)
             ax.set_facecolor('#f8f9fa')

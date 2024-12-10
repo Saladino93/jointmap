@@ -503,7 +503,7 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     def process_xlm0(xlm0, Rxx, Wxx, cxx, nome):
         xlm0 = alm_copy(xlm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
         almxfl(xlm0, utils.cli(Rxx), mmax_qlm, True)  # Normalized QE
-        np.save(libdir_iterator+f"/{nome}.npy", xlm0)
+        np.save(libdir_iterator+f"/{nome}_norm.npy", xlm0)
         almxfl(xlm0, Wxx, mmax_qlm, True)  # Wiener-filter QE
         almxfl(xlm0, cxx > 0, mmax_qlm, True)
         return xlm0
@@ -512,8 +512,12 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     shift_1, shift_2 = 1000, 2000
     plm0_12 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_2) - mf0_p
     plm0_21 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_1) - mf0_p
+    plm0_11 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_1) - mf0_p
+    plm0_22 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_2) - mf0_p
     plm0_12 = process_xlm0(plm0_12, Rpp, WF_p, cpp > 0, "plm0_12")
     plm0_21 = process_xlm0(plm0_21, Rpp, WF_p, cpp > 0, "plm0_21")
+    plm0_11 = process_xlm0(plm0_11, Rpp, WF_p, cpp > 0, "plm0_11")
+    plm0_22 = process_xlm0(plm0_22, Rpp, WF_p, cpp > 0, "plm0_22")
 
 
     olm0 = alm_copy(olm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
@@ -524,8 +528,13 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
     olm0_12 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_2) - mf0_o
     olm0_21 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_1) - mf0_o
+    olm0_11 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_1) - mf0_o
+    olm0_22 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_2) - mf0_o
+
     olm0_12 = process_xlm0(olm0_12, Roo, WF_o, coo > 0, "olm0_12")
     olm0_21 = process_xlm0(olm0_21, Roo, WF_o, coo > 0, "olm0_21")
+    olm0_11 = process_xlm0(olm0_11, Roo, WF_o, coo > 0, "olm0_11")
+    olm0_22 = process_xlm0(olm0_22, Roo, WF_o, coo > 0, "olm0_22")
 
 
     if condition:
@@ -537,8 +546,14 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
         alm0_12 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_2) - mf0_p
         alm0_21 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_1) - mf0_p
+        alm0_11 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_1) - mf0_p
+        alm0_22 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_2) - mf0_p
+
         alm0_12 = process_xlm0(alm0_12, Raa, WF_a, cpp > 0, "alm0_12")
         alm0_21 = process_xlm0(alm0_21, Raa, WF_a, cpp > 0, "alm0_21")
+        alm0_11 = process_xlm0(alm0_11, Raa, WF_a, cpp > 0, "alm0_11")
+        alm0_22 = process_xlm0(alm0_22, Raa, WF_a, cpp > 0, "alm0_22")
+        
 
         flm0 = alm_copy(flm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
         almxfl(flm0, utils.cli(Rff), mmax_qlm, True)  # Normalized QE
@@ -639,11 +654,11 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     if condition:
         starting_points_dictionary = {"p": plm0, "a": alm0, "o": olm0, "f": flm0}
         if doshift:
-            starting_points_dictionary_12 = {"p": plm0_12, "a": alm0_12, "o": olm0_12, "f": flm0_12}
+            starting_points_dictionary_12 = {"p": plm0_11, "a": alm0_11, "o": olm0_11, "f": flm0_12}
             starting_points_dictionary_21 = {"p": plm0_21, "a": alm0_21, "o": olm0_21, "f": flm0_21}
     else:
         starting_points_dictionary = {"p": plm0, "a": alm0}
-        starting_points_dictionary_12 = {"p": plm0_12, "a": alm0_12}
+        starting_points_dictionary_12 = {"p": plm0_11, "a": alm0_11}
         starting_points_dictionary_21 = {"p": plm0_21, "a": alm0_21}
 
     plm0 = np.concatenate([starting_points_dictionary[key] for key in selected])
@@ -739,7 +754,7 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
             iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,
                 plm0, plm0 * 0, Rpp_unl, cpp, cls_unl, filtr, k_geom, chain_descrs(lmax_unl, cg_tol), stepper
                 , wflm0=lambda : alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl), 
-                pp_h0s_matrix = pp_h0s_matrix, inv_signal_matrix = inv_signal_matrix, plm0_12 = plm0_12, plm0_21 = plm0_21)
+                pp_h0s_matrix = pp_h0s_matrix, inv_signal_matrix = inv_signal_matrix, plm0_12 = plm0_12, plm0_21 = plm0_21, sims_lib = sims_walpha)
         else:
             iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,
                 plm0, plm0 * 0, Rpp_unl, cpp, cls_unl, filtr, k_geom, chain_descrs(lmax_unl, cg_tol), stepper

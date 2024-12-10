@@ -23,3 +23,7 @@ export OMP_PROC_BIND=false
 
 srun python ../scripts/analyse_parallel.py --qe_key p_p --cmbversion test_3 --version test_3_low_lmax --imin 0 --imax 31 --itmax 0 --lmax_qlm 5120 --selected p o
 srun python ../scripts/analyse_parallel.py --qe_key p_p --cmbversion test_3 --version test_3_low_lmax_randomized --imin 0 --imax 31 --itmax 0 --lmax_qlm 5120 --selected p o
+
+
+
+srun python ../scripts/param_joint.py -k p_p -itmax 0 -imin 99 -imax 99 -v test_randomizing_new -joint_module -cmb_version test_randomizing_new -no_curl -no_tau -no_birefringence -selected p o -tol 6 -beam 1. -nlev_t 1. -lmax_ivf 4000 -mmax_ivf 4000 -lmin_elm 30 -lmin_blm 200 -lmax_unl 4000 -mmax_unl 4000 -lmax_qlm 5120

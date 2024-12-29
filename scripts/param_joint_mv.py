@@ -93,7 +93,7 @@ parser.add_argument('-mmax_qlm', dest='mmax_qlm', type=int, default=5120, help='
 
 parser.add_argument('-Lmin', dest='Lmin', type=int, default=1, help='Lmin reconstruction')
 
-parser.add_argument('-lmin_tlm', dest='lmin_tlm', type=int, default=1, help='lmin_tlm')
+parser.add_argument('-lmin_tlm', dest='lmin_tlm', type=int, default=2, help='lmin_tlm')
 parser.add_argument('-lmin_elm', dest='lmin_elm', type=int, default=2, help='lmin_elm')
 parser.add_argument('-lmin_blm', dest='lmin_blm', type=int, default=200, help='lmin_blm')
 
@@ -156,7 +156,7 @@ cmb_version = args.cmb_version
 joint_module = args.joint_module
 
 if joint_module:
-    from delensalot.core.opfilt.MAP_opfilt_iso_p_general import alm_filter_nlev_wl
+    from delensalot.core.opfilt.MAP_opfilt_iso_tp_general import alm_filter_nlev_wl
     from delensalot.core.secondaries import secondaries
     from delensalot.core.iterator.cs_iterator_operator import iterator_cstmf as iterator_cstmf
 else:
@@ -451,12 +451,14 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     qlms_dd_QE = qlms_dd_walpha
     sims_MAP = sims_walpha
 
+    kp = "p_p"
+
     mf_sims = np.unique(mc_sims_mf_it0 if not 'noMF' in version else np.array([]))
     mf0_p = qlms_dd_QE.get_sim_qlm_mf('p' + k[1:], mf_sims)  # Mean-field to subtract on the first iteration:
     mf0_o = qlms_dd_QE.get_sim_qlm_mf('x' + k[1:], mf_sims)  # Mean-field to subtract on the first iteration:
-    condition = (k == 'p_p')
+    condition = True
     if condition:
-        mf0_a = qlms_dd_QE.get_sim_qlm_mf('a' + k[1:], mf_sims)  # Mean-field to subtract on the first iteration:
+        mf0_a = qlms_dd_QE.get_sim_qlm_mf('a' + kp[1:], mf_sims)  # Mean-field to subtract on the first iteration:
         mf0_f = qlms_dd_QE.get_sim_qlm_mf('f' + k[1:], mf_sims)  # Mean-field to subtract on the first iteration:
 
 
@@ -465,26 +467,38 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
         mf0_p = (mf0_p - qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx)) / Nmf) * (Nmf / (Nmf - 1))
         mf0_o = (mf0_o - qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx)) / Nmf) * (Nmf / (Nmf - 1))
         if condition:
-            mf0_a = (mf0_a - qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx)) / Nmf) * (Nmf / (Nmf - 1))
+            mf0_a = (mf0_a - qlms_dd_QE.get_sim_qlm('a' + kp[1:], int(simidx)) / Nmf) * (Nmf / (Nmf - 1))
             mf0_f = (mf0_f - qlms_dd_QE.get_sim_qlm('f' + k[1:], int(simidx)) / Nmf) * (Nmf / (Nmf - 1))
 
     plm0 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx)) - mf0_p  # Unormalized quadratic estimate:
     olm0 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx)) - mf0_o  # Unormalized quadratic estimate:
     if condition:
-        alm0 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx)) - mf0_a  # Unormalized quadratic estimate:
+        alm0 = qlms_dd_QE.get_sim_qlm('a' + kp[1:], int(simidx)) - mf0_a  # Unormalized quadratic estimate:
         flm0 = qlms_dd_QE.get_sim_qlm('f' + k[1:], int(simidx)) - mf0_f  # Unormalized quadratic estimate:
+
+
+    if k == "p":
+        cls_filter = {}
+        cls_filter["tt"] = cli(ftl)
+        cls_filter["ee"] = cli(fel)
+        cls_filter["bb"] = cli(fbl)
+        cls_filter["te"] = cls_len['te'][:lmax_ivf + 1]
+        fal = utils.cl_inverse(cls_filter)
+        
+    else:
+        fal = {'e': fel, 'b': fbl, 't':ftl}
 
     # Isotropic normalization of the QE
 
     #NOTE: cls_grad!!!!
-    Rpp, Roo = qresp.get_response('p' + k[1:], lmax_ivf, 'p', cls_len, cls_grad, {'e': fel, 'b': fbl, 't': ftl},
+    Rpp, Roo = qresp.get_response('p' + k[1:], lmax_ivf, 'p', cls_len, cls_grad, fal,
                                   lmax_qlm=lmax_qlm)[0:2]
     
     if condition:
-        Raa = qresp.get_response('a' + k[1:], lmax_ivf, 'a', cls_len, cls_grad, {'e': fel, 'b': fbl, 't': ftl},
+        Raa = qresp.get_response('a' + kp[1:], lmax_ivf, 'a', cls_len, cls_grad, fal,
                                     lmax_qlm=lmax_qlm)[0]
         
-        Rff = qresp.get_response('f' + k[1:], lmax_ivf, 'f', cls_len, cls_grad, {'e': fel, 'b': fbl, 't': ftl},
+        Rff = qresp.get_response('f' + k[1:], lmax_ivf, 'f', cls_len, cls_grad, fal,
                                     lmax_qlm=lmax_qlm)[0]
     
     # Isotropic Wiener-filter (here assuming for simplicity N0 ~ 1/R)
@@ -509,33 +523,12 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
         return xlm0
 
 
-    shift_1, shift_2 = 1000, 2000
-    """plm0_12 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_2) - mf0_p
-    plm0_21 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_1) - mf0_p"""
-    plm0_11 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_1) - mf0_p
-    plm0_22 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_2) - mf0_p
-    """plm0_12 = process_xlm0(plm0_12, Rpp, WF_p, cpp > 0, "plm0_12")
-    plm0_21 = process_xlm0(plm0_21, Rpp, WF_p, cpp > 0, "plm0_21")"""
-    plm0_11 = process_xlm0(plm0_11, Rpp, WF_p, cpp > 0, "plm0_11")
-    plm0_22 = process_xlm0(plm0_22, Rpp, WF_p, cpp > 0, "plm0_22")
-
 
     olm0 = alm_copy(olm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
     almxfl(olm0, utils.cli(Roo), mmax_qlm, True)  # Normalized QE
     np.save(libdir_iterator+"/olm0_norm.npy", olm0)
     almxfl(olm0, WF_o, mmax_qlm, True)  # Wiener-filter QE assuming the curl signal is the expected one
     almxfl(olm0, coo > 0, mmax_qlm, True)
-
-    """olm0_12 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_2) - mf0_o
-    olm0_21 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_1) - mf0_o"""
-    olm0_11 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_1) - mf0_o
-    olm0_22 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_2) - mf0_o
-
-    """olm0_12 = process_xlm0(olm0_12, Roo, WF_o, coo > 0, "olm0_12")
-    olm0_21 = process_xlm0(olm0_21, Roo, WF_o, coo > 0, "olm0_21")"""
-    olm0_11 = process_xlm0(olm0_11, Roo, WF_o, coo > 0, "olm0_11")
-    olm0_22 = process_xlm0(olm0_22, Roo, WF_o, coo > 0, "olm0_22")
-
 
     if condition:
         alm0 = alm_copy(alm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
@@ -544,36 +537,17 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
         almxfl(alm0, WF_a, mmax_qlm, True)  # Wiener-filter QE
         almxfl(alm0, caa > 0, mmax_qlm, True)
 
-        """alm0_12 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_2) - mf0_p
-        alm0_21 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_1) - mf0_p"""
-        alm0_11 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_1) - mf0_p
-        alm0_22 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_2) - mf0_p
-
-        """alm0_12 = process_xlm0(alm0_12, Raa, WF_a, cpp > 0, "alm0_12")
-        alm0_21 = process_xlm0(alm0_21, Raa, WF_a, cpp > 0, "alm0_21")"""
-        alm0_11 = process_xlm0(alm0_11, Raa, WF_a, cpp > 0, "alm0_11")
-        alm0_22 = process_xlm0(alm0_22, Raa, WF_a, cpp > 0, "alm0_22")
-        
-
         flm0 = alm_copy(flm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
         almxfl(flm0, utils.cli(Rff), mmax_qlm, True)  # Normalized QE
         np.save(libdir_iterator+"/flm0_norm.npy", flm0)
         almxfl(flm0, WF_f, mmax_qlm, True)  # Wiener-filter QE
         almxfl(flm0, cff > 0, mmax_qlm, True)
 
-        """flm0_12 = qlms_dd_QE.get_sim_qlm('f' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_2) - mf0_p
-        flm0_21 = qlms_dd_QE.get_sim_qlm('f' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_1) - mf0_p"""
-        #flm0_12 = process_xlm0(flm0_12, Raa, WF_a, cpp > 0, "flm0_12")
-        #flm0_21 = process_xlm0(flm0_21, Raa, WF_a, cpp > 0, "flm0_21")
-
-        flm0_11 = qlms_dd_QE.get_sim_qlm('f' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_1) - mf0_p
-        flm0_11 = process_xlm0(flm0_11, Raa, WF_a, cpp > 0, "flm0_11")
-
     Rpp_unl, Roo_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,
                                           {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
 
     if condition:
-        Raa_unl = qresp.get_response('a' + k[1:], lmax_ivf, 'a', cls_unl, cls_unl,
+        Raa_unl = qresp.get_response('a' + kp[1:], lmax_ivf, 'a', cls_unl, cls_unl,
                                         {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
         
         Rff_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'f', cls_unl, cls_unl,
@@ -582,11 +556,11 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
         Rpf_unl, Rof_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'f', cls_unl, cls_unl,
                                             {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
         
-        Rpa_unl, Roa_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'a', cls_unl, cls_unl,
+        """Rpa_unl, Roa_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'a', cls_unl, cls_unl,
                                             {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
         
-        Rap_unl, Rao_unl = qresp.get_response('a' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,
-                                        {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
+        Rap_unl, Rao_unl = qresp.get_response('a' + kp[1:], lmax_ivf, 'p', cls_unl, cls_unl,
+                                        {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]"""
 
         Rfp_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,  
                                         {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
@@ -658,25 +632,15 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
     if condition:
         starting_points_dictionary = {"p": plm0, "a": alm0, "o": olm0, "f": flm0}
-        if doshift:
-            starting_points_dictionary_12 = {"p": plm0_11, "a": alm0_11, "o": olm0_11, "f": flm0_11}
-            #starting_points_dictionary_21 = {"p": plm0_21, "a": alm0_21, "o": olm0_21, "f": flm0_21}
     else:
         starting_points_dictionary = {"p": plm0, "a": alm0}
-        starting_points_dictionary_12 = {"p": plm0_11, "a": alm0_11}
-        #starting_points_dictionary_21 = {"p": plm0_21, "a": alm0_21}
 
     plm0 = np.concatenate([starting_points_dictionary[key] for key in selected])
 
-    if doshift:
-        plm0_12 = np.concatenate([starting_points_dictionary_12[key] for key in selected])
-        #plm0_21 = np.concatenate([starting_points_dictionary_21[key] for key in selected])
-        plm0_21 = None
-    else:
-        plm0_12 = None
-        plm0_21 = None
+    plm0_12 = None
+    plm0_21 = None
     
-    if k in ['p_p']:
+    if k in ['p']:
         if joint_module:
             
             LensingOp = secondaries.Lensing(name = "p", lmax = ffi.lmax_dlm, mmax = ffi.mmax_dlm, sht_tr = tr, disable = disable_function("p"))
@@ -702,31 +666,38 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
             print("Operators are", Operator.names)
 
-            filtr = alm_filter_nlev_wl(ninv_geom, nlev_p, transf_elm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf),
-                                        transf_b=transf_blm, nlev_b=nlev_p, operators = Operator)
+            eblm = np.array(sims_MAP.get_sim_pmap(int(simidx)))
+            tlm = sims_MAP.get_sim_tmap(int(simidx))
+            datmaps = np.array([alm_copy(tlm, None, lmax_ivf, mmax_ivf),
+                                alm_copy(eblm[0], None, lmax_ivf, mmax_ivf),
+                                alm_copy(eblm[1], None, lmax_ivf, mmax_ivf)])
+            del tlm, eblm
+            wflm0 = lambda: np.array([alm_copy(ivfs_walpha.get_sim_tmliklm(simidx), None, lmax_unl, mmax_unl),
+                                    alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl)])
+
+            filtr = alm_filter_nlev_wl(nlev_t, nlev_p, ffi, transf_tlm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf),
+                                        transf_e = transf_elm, transf_b=transf_blm, nlev_b=nlev_p, operators = Operator, ninv_geom = ninv_geom)
             
         else:
             # Here multipole cuts are set by the transfer function (those with 0 are not considered)
             filtr = alm_filter_nlev_wl(nlev_p, ffi, transf_elm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf),
                                         transf_b=transf_blm, nlev_b=nlev_p)
         # dat maps must now be given in harmonic space in this idealized configuration
-        eblm = np.array(sims_MAP.get_sim_pmap(int(simidx)))
-        datmaps = np.array([alm_copy(eblm[0], None, lmax_ivf, mmax_ivf), alm_copy(eblm[1], None, lmax_ivf, mmax_ivf) ])
-        del eblm
-        wflm0 = lambda: alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl)
-    elif k in ['p']:
-        filtr = alm_filter_nlev_wl_tp(nlev_t, nlev_p, ffi, transf_tlm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf),
-                                    transf_b=transf_blm, transf_e=transf_elm)
-        # dat maps must now be given in harmonic space in this idealized configuration
-        eblm = np.array(sims_MAP.get_sim_pmap(int(simidx)))
-        tlm = sims_MAP.get_sim_tmap(int(simidx))
-        datmaps = np.array([alm_copy(tlm, None, lmax_ivf, mmax_ivf),
-                            alm_copy(eblm[0], None, lmax_ivf, mmax_ivf),
-                            alm_copy(eblm[1], None, lmax_ivf, mmax_ivf)])
-        del tlm, eblm
-        wflm0 = lambda: np.array([alm_copy(ivfs_walpha.get_sim_tmliklm(simidx), None, lmax_unl, mmax_unl),
-                                  alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl)])
 
+        """
+        elif k in ['p']:
+            filtr = alm_filter_nlev_wl_tp(nlev_t, nlev_p, ffi, transf_tlm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf),
+                                        transf_b=transf_blm, transf_e=transf_elm)
+            # dat maps must now be given in harmonic space in this idealized configuration
+            eblm = np.array(sims_MAP.get_sim_pmap(int(simidx)))
+            tlm = sims_MAP.get_sim_tmap(int(simidx))
+            datmaps = np.array([alm_copy(tlm, None, lmax_ivf, mmax_ivf),
+                                alm_copy(eblm[0], None, lmax_ivf, mmax_ivf),
+                                alm_copy(eblm[1], None, lmax_ivf, mmax_ivf)])
+            del tlm, eblm
+            wflm0 = lambda: np.array([alm_copy(ivfs_walpha.get_sim_tmliklm(simidx), None, lmax_unl, mmax_unl),
+                                    alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl)])
+        """
     elif k in ['ptt']:
         # Here multipole cuts are set by the transfer function (those with 0 are not considered)
         filtr = alm_filter_nlev_wl_t(nlev_t, ffi, transf_tlm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf))
@@ -760,7 +731,7 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
             stepper = steps.nrstep(lmax_qlm, mmax_qlm, val = step_val, vals = [step_val]*len(Operator.names))
             iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,
                 plm0, plm0 * 0, Rpp_unl, cpp, cls_unl, filtr, k_geom, chain_descrs(lmax_unl, cg_tol), stepper
-                , wflm0=lambda : alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl), 
+                , wflm0=wflm0, 
                 pp_h0s_matrix = pp_h0s_matrix, inv_signal_matrix = inv_signal_matrix, plm0_12 = plm0_12, plm0_21 = plm0_21, sims_lib = sims_walpha,
                 idx = simidx, itmax = args.itmax)
         else:

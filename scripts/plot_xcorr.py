@@ -133,12 +133,12 @@ def load_inputs(config, selected, scratch, cmbversion, lmax_rec):
 
 
 # Function to process a configuration and prepare data for plotting
-def process_config(config_path, itrs, subset_selected):
+def process_config(config_path, itrs, subset_selected, simidx = 0):
     config = load_config(config_path)
     scratch = os.getenv("SCRATCH") + "/JOINTRECONSTRUCTION/"
     cmbversion = config["cmb_version"]
     version = config["v"]
-    its_folder = f"{scratch}/{cmbversion}_version_{version}_recs/p_p_sim0000{version}/"
+    its_folder = f"{scratch}/{cmbversion}_version_{version}_recs/p_p_sim{simidx:04}{version}/"
     recs = rec()
     plms = recs.load_plms(its_folder, itrs=itrs)
 

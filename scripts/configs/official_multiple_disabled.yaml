@@ -1,0 +1,31 @@
+#This file has full set of effects in the observed CMB
+#but it only reconstructs the rotation and lensing effects.
+#the rotation effect is disabled as an operator
+title: '$[\widehat{\alpha}\widehat{\phi}]^{D}[\alpha, \phi]$'
+k: "p_p"
+itmax: 15
+imin: 0
+imax: 31
+v: "apof_a_f_disabled_new_official" #should have been disabled :p
+joint_module: true
+cmb_version: "apof_new"
+selected: ["ad", "fd", "p", "o"] #ad would give a but disabled.
+cmbchain: ["a", "f", "p", "o"]
+tol: 6
+beam: 1.0
+nlev_t: 1.0
+lmax_ivf: 4000
+mmax_ivf: 4000
+lmin_elm: 30
+lmin_blm: 30
+lmax_unl: 4000
+mmax_unl: 4000
+lmax_qlm: 5000
+mmax_qlm: 5000
+#no_tau: true
+#no_curl: true
+# Binning parameters
+binning:
+  lmin: 20
+  lmax: 4000
+  delta: 40

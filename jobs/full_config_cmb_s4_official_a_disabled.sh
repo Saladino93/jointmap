@@ -1,6 +1,6 @@
 #!/bin/sh -l
-#SBATCH --job-name=itbh
-#SBATCH --time=04:00:00
+#SBATCH --job-name=official_a_disabled
+#SBATCH --time=02:00:00
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=24
 #SBATCH --constraint=gpu
@@ -17,7 +17,5 @@ export OMP_NUM_THREADS=24
 export OMP_PLACES=threads
 export OMP_PROC_BIND=false
 
-#srun python ../scripts/param_joint.py -c ../scripts/configs/config_full_cmb_s4.yaml
-#srun python ../scripts/param_joint.py -c ../scripts/configs/config_full_alpha_disabled_lensing_cmb_s4.yaml
-
-srun python ../scripts/param_joint.py -c ../scripts/configs/alpha_after_lensing_sims.yaml
+#srun python ../scripts/param_joint.py -c ../scripts/configs/official_a_disabled.yaml
+srun python ../scripts/param_joint.py -c ../scripts/configs/official_a_disabled_scale_dependent.yaml

@@ -10,6 +10,36 @@ from delensalot.core.iterator import statics
 import argparse
 from types import SimpleNamespace
 
+############################################################################################################################
+
+import lenspyx
+from plancklens import shts
+
+def _get_dlm(dlm):
+    dclm = np.zeros_like(dlm)
+    lmax_dlm = hp.Alm.getlmax(dlm.size, -1)
+    mmax_dlm = lmax_dlm
+    # potentials to deflection
+    p2d = np.sqrt(np.arange(lmax_dlm + 1, dtype=float) * np.arange(1, lmax_dlm + 2, dtype=float))
+    #p2d[:self.lmin_dlm] = 0
+    hp.almxfl(dlm, p2d, mmax_dlm, inplace=True)
+    hp.almxfl(dclm, p2d, mmax_dlm, inplace=True)
+    return dlm, dclm, lmax_dlm, mmax_dlm
+
+def lensed_alpha(alm0_input, plm0_input):
+    dlm, dclm, lmax_dlm, mmax_dlm = _get_dlm(plm0_input)
+    lmax_map = hp.Alm.getlmax(alm0_input.size)
+    nside_lens = 2048
+    a0_len = lenspyx.alm2lenmap(
+        alm0_input, [dlm, None], geometry=('healpix', {'nside': nside_lens}),
+        epsilon=1e-8, verbose=0)
+    alm0_len = shts.map2alm(a0_len, lmax = lmax_map)
+    print("alm0_len", alm0_len.shape)
+    return alm0_len
+
+
+############################################################################################################################
+
 # Initialize MPI
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
@@ -107,6 +137,8 @@ def read_input(path, lmax_qlm):
     else:
         return utils.alm_copy(hp.read_alm(path), lmax = lmax_qlm)
 
+
+
 def get_input(directory, cmbversion, idx, lmax_qlm):
     """Load input alms for each selected field"""
     if args.unlensed:
@@ -116,6 +148,17 @@ def get_input(directory, cmbversion, idx, lmax_qlm):
 def get_input_down(directory, cmbversion, idx, lmax_qlm):
     """Load input alms for each selected field"""
     return [read_input(os.path.join(directory, cmbversion, "simswalpha", f"sim_{idx:04}_{nome_down[s]}.fits"), lmax_qlm) for s in selected]
+
+def get_input_lensed(directory, cmbversion, idx, lmax_qlm, key):
+    if key == "a":
+        qp = nome["p"]
+        plm0_input = read_input(os.path.join(directory, cmbversion, "simswalpha", f"sim_{idx:04}_{qp}.fits"), lmax_qlm)
+        qa = nome["a"]
+        alm0_input = read_input(os.path.join(directory, cmbversion, "simswalpha", f"sim_{idx:04}_{qa}.fits"), lmax_qlm)
+        alm0_input_lensed = lensed_alpha(alm0_input, plm0_input)
+        return utils.alm_copy(alm0_input_lensed, lmax = lmax_qlm)
+    else:
+        return np.zeros_like(hp.Alm.getlmax(lmax_qlm))
 
 def get_reconstruction_and_input(version, qe_key, idx, cmbversion):
     """Load reconstructed alms and input alms"""
@@ -138,6 +181,7 @@ local_total_qe = []
 local_total_qe_cross = []
 inputs = []
 inputs_down = []
+inputs_lensed = []
 nfields = len(selected)
 
 # Process each simulation in the local subset
@@ -152,6 +196,9 @@ for idx in local_sims:
     input_down = [hp.alm2cl(x) for x in recs_qe[2]]
     inputs_down.append(input_down)
 
+    input_lensed = [hp.alm2cl(get_input_lensed(directory, args.cmb_version, idx, args.lmax_qlm, s)) for s in selected]
+    inputs_lensed.append(input_lensed)
+    
     local_total_qe.append(np.concatenate([hp.alm2cl(x) for x in np.split(recs_qe[0], nfields)]))
     local_total_qe_cross.append(np.concatenate([hp.alm2cl(x, xi) for x, xi in zip(np.split(recs_qe[0], nfields), input_fields)]))
 
@@ -160,6 +207,7 @@ total_qe = comm.gather(local_total_qe, root=0)
 total_qe_cross = comm.gather(local_total_qe_cross, root=0)
 total_inputs = comm.gather(inputs, root=0)
 total_inputs_down = comm.gather(inputs_down, root=0)
+total_inputs_lensed = comm.gather(inputs_lensed, root=0)
 
 # Process iterative results if required
 if args.itmax >= 0:
@@ -167,6 +215,7 @@ if args.itmax >= 0:
     local_total_qe_it = []
     local_total_qe_it_cross = []
     local_total_qe_it_cross_down = []
+    local_total_qe_it_lensed = []
 
     for idx in local_sims:
         if rank == 0:
@@ -176,22 +225,29 @@ if args.itmax >= 0:
         temp = []
         temp_cross = []
         temp_cross_down = []
+        temp_cross_lensed = []
+
+
+        inputs = recs_it[1]
+        inputs_down = recs_it[2]
+        inputs_lensed = [hp.alm2cl(get_input_lensed(directory, args.cmb_version, idx, args.lmax_qlm, s)) for s in selected]
 
         for i in iters:
             phi = recs_it[0][i]
-            inputs = recs_it[1]
-            inputs_down = recs_it[2]
             temp.append(np.concatenate([hp.alm2cl(x) for x in np.split(phi, nfields)]))
             temp_cross.append(np.concatenate([hp.alm2cl(x, input) for x, input in zip(np.split(phi, nfields), inputs)]))
             temp_cross_down.append(np.concatenate([hp.alm2cl(x, input) for x, input in zip(np.split(phi, nfields), inputs_down)]))
+            temp_cross_lensed.append(np.concatenate([hp.alm2cl(x, input) for x, input in zip(np.split(phi, nfields), inputs_lensed)]))
 
         local_total_qe_it.append(temp)
         local_total_qe_it_cross.append(temp_cross)
         local_total_qe_it_cross_down.append(temp_cross_down)
+        local_total_qe_it_lensed.append(temp_cross_lensed)
 
     total_qe_it = comm.gather(local_total_qe_it, root=0)
     total_qe_it_cross = comm.gather(local_total_qe_it_cross, root=0)
     total_qe_it_cross_down = comm.gather(local_total_qe_it_cross_down, root=0)
+    total_qe_it_lensed = comm.gather(local_total_qe_it_lensed, root=0)
 
     if rank == 0:
         total_qe_it = np.concatenate(total_qe_it)
@@ -209,17 +265,24 @@ if args.itmax >= 0:
                 f"total_qe_it_cross_down_{args.qe_key}_{args.v}_{args.cmb_version}_{args.imin}_{args.imax}_{args.itmax}"),
                 total_qe_it_cross_down)
 
+        np.save(opj(saving_directory,
+                f"total_qe_it_lensed_{args.qe_key}_{args.v}_{args.cmb_version}_{args.imin}_{args.imax}_{args.itmax}"),
+                total_qe_it_lensed)
+
 # Save outputs only on the root process
 if rank == 0:
     total_qe = np.concatenate(total_qe)
     total_qe_cross = np.concatenate(total_qe_cross)
     total_inputs = np.concatenate(total_inputs)
     total_inputs_down = np.concatenate(total_inputs_down)
+    total_inputs_lensed = np.concatenate(total_inputs_lensed)
 
     np.save(opj(saving_directory, f"input_{args.v}_{args.cmb_version}_{args.imin}_{args.imax}_{args.itmax}"), 
             total_inputs)
     np.save(opj(saving_directory, f"input_down_{args.v}_{args.cmb_version}_{args.imin}_{args.imax}_{args.itmax}"),
             total_inputs_down)
+    np.save(opj(saving_directory, f"input_lensed_{args.v}_{args.cmb_version}_{args.imin}_{args.imax}_{args.itmax}"),
+            total_inputs_lensed)
     np.save(opj(saving_directory, f"total_qe_{args.qe_key}_{args.v}_{args.cmb_version}_{args.imin}_{args.imax}_{args.itmax}"), 
             total_qe)
     np.save(opj(saving_directory, f"total_qe_cross_{args.qe_key}_{args.v}_{args.cmb_version}_{args.imin}_{args.imax}_{args.itmax}"), 

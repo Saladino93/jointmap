@@ -1,10 +1,10 @@
 #!/bin/sh -l
-#SBATCH --job-name=itbh
+#SBATCH --job-name=analyze
 #SBATCH --time=00:30:00
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=24
 #SBATCH --constraint=gpu
-#SBATCH --nodes=8
+#SBATCH --nodes=32
 #SBATCH --output=/scratch/snx3000/odarwish/slurms/lenscarf-slurm-%J.out
 #SBATCH --account=lp44
 #SBATCH --partition=normal
@@ -17,13 +17,9 @@ export OMP_NUM_THREADS=24
 export OMP_PLACES=threads
 export OMP_PROC_BIND=false
 
-#srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/config_full_alpha_disabled_lensing_cmb_s4.yaml
-#srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/config_full_alpha_lensing_cmb_s4.yaml
-#srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/config_full_no_alpha_no_curl_lensing_cmb_s4.yaml
-#srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/config_full_tau_disabled_lensing_cmb_s4.yaml
-#srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/config_full_alpha_no_curl_lensing_cmb_s4.yaml
-
-
-#srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/config_full.yaml
-srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/config_full_cmb_s4.yaml
-srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/config_full_a_d_disabled_cmb_s4.yaml
+#srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_so_a_disabled.yaml
+srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_a_disabled.yaml
+#srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_multiple.yaml
+#srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_multiple_disabled.yaml
+#srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_deep_multiple.yaml
+#srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_a_disabled_scale_dependent.yaml

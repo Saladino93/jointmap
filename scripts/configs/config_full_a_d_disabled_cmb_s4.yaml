@@ -1,0 +1,22 @@
+#This file has full set of effects in the observed CMB
+#but it only reconstructs the rotation effect.
+title: '$[\widehat{\alpha}]^{R}[\alpha, \phi]$'
+k: "p_p"
+itmax: 30
+imin: 0
+imax: 31
+v: "all_cmb_check_a_f_disabled_cmb_s4"
+joint_module: true
+cmb_version: "all_cmb"
+selected: ["ad", "fd", "p", "o"]
+tol: 6
+beam: 1.0
+nlev_t: 1.
+lmax_ivf: 4000
+mmax_ivf: 4000
+lmin_elm: 10
+lmin_blm: 20
+lmax_unl: 4000
+mmax_unl: 4000
+lmax_qlm: 5000
+mmax_qlm: 5000

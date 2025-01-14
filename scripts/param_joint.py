@@ -277,8 +277,6 @@ cls_alpha = 10**(-args.ACB)*2*np.pi/(ell*(ell+1))**(args.ns)
 cls_alpha[0] = 0
 cls_unl_walpha["aa"] = cls_alpha
 
-print("AAARGS NS", args.ns)
-
 HOME = os.environ['HOME']
 tau_dir = opj(HOME, 'jointmap', 'data', 'tau_lensing_data')
 tau_phi = np.loadtxt(opj(tau_dir, "theory_spectra_optimistic_ptau.txt"))
@@ -516,7 +514,14 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
                 {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
         Rfp_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'p', cls_len, cls_grad,  
                                         {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
-        np.savetxt("resps.txt", np.c_[Rpp, Rff, Rpf_unl, Rfp_unl, Rff_bh_p])
+        
+        Rap = qresp.get_response('a' + k[1:], lmax_ivf, 'p', cls_len, cls_grad, {'e': fel, 'b': fbl, 't': ftl},
+                                    lmax_qlm=lmax_qlm)[0]
+        
+        Rpa = qresp.get_response('p' + k[1:], lmax_ivf, 'a', cls_len, cls_grad, {'e': fel, 'b': fbl, 't': ftl},
+                                    lmax_qlm=lmax_qlm)[0]
+
+        np.savetxt("resps.txt", np.c_[Rpp, Rff, Rpf_unl, Rfp_unl, Rff_bh_p, Rap, Rap, Rpa, Rpa], header="Rpp, Rff, Rpf_unl, Rfp_unl, Rff_bh_p, Rap, Rao, Rpa, Roa")
     
     #flm0_bh = alm_copy(flm0_bh, None, lmax_qlm, mmax_qlm)
     #almxfl(flm0_bh, utils.cli(Rff_bh_p), mmax_qlm, True)  # Normalized QE
@@ -740,7 +745,7 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
             CurlLensingOp.set_field(ffi)
 
             RotationOp = secondaries.Rotation(name = "a", lmax = lmax_qlm, mmax = mmax_qlm, sht_tr = tr, disable = disable_function("a"))
-            alpha_map = ninv_geom.synthesis(plm0, spin = 0, lmax = lmax_qlm, mmax = mmax_qlm, nthreads = 128).squeeze()
+            alpha_map = ninv_geom.synthesis(plm0, spin = 0, lmax = lmax_qlm, mmax = mmax_qlm, nthreads = tr).squeeze()
             RotationOp.set_field(np.zeros_like(alpha_map))
 
             PatchyTauOp = secondaries.PatchyTau(name = "f", lmax = ffi.lmax_dlm, mmax = ffi.mmax_dlm, sht_tr = tr, disable = disable_function("f"))
@@ -829,12 +834,14 @@ if __name__ == '__main__':
     soltn_cond = lambda it: True # Uses (or not) previous E-mode solution as input to search for current iteration one
 
 
+    maximum = args.itmax+2
+
     mpi.barrier = lambda : 1 # redefining the barrier (Why ? )
     from delensalot.core.iterator.statics import rec as Rec
     jobs = []
     for idx in np.arange(args.imin, args.imax + 1):
         lib_dir_iterator = libdir_iterators(args.k, idx, args.v)
-        if Rec.maxiterdone(lib_dir_iterator) < args.itmax or args.plot:
+        if Rec.maxiterdone(lib_dir_iterator) < maximum or args.plot:
             jobs.append(idx)
 
     if mpi.rank ==0:
@@ -845,7 +852,7 @@ if __name__ == '__main__':
         lib_dir_iterator = libdir_iterators(args.k, idx, args.v)
         print("iterator folder: " + lib_dir_iterator)
 
-        if args.itmax >= 0 and Rec.maxiterdone(lib_dir_iterator) < args.itmax:
+        if (args.itmax >= 0) and (Rec.maxiterdone(lib_dir_iterator) < maximum):
             itlib = get_itlib(args.k, idx, args.v, 1.)
             for i in range(args.itmax + 1):
                 print("****Iterator: setting cg-tol to %.4e ****"%tol_iter(i))
@@ -854,21 +861,28 @@ if __name__ == '__main__':
                 itlib.soltn_cond   = soltn_cond(i)
                 print("doing iter " + str(i))
 
-                #give this to rank 0 of inner loop
-                itlib.iterate(i, 'p')
-                print("done iter " + str(i))
-
                 if args.do_mf and (i > 0):
                     print("****Starting with mean field****")
 
                     base = 2000
-                    Nmf = 5
+                    Nmf = 15
                     key = "p"
                     
                     #give this to other ranks
                     simidxs = np.arange(idx+base, idx+base+Nmf)
                     grads_mf.get_graddet_sim_mf_trick(itlib, i, simidxs, 
                                 key, libPHASCMB_mf, zerolensing = False, recache = False)
+
+                #give this to rank 0 of inner loop
+                itlib.iterate(i, 'p')
+                print("done iter " + str(i))
+
+                if i == args.itmax:
+                    print("**Get N0 sims**")
+                    N0s = 10
+                    key = "p"
+                    for j in range(N0s):
+                        grads_mf.calc_sims(itlib, idx+j, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key)
                     
                 #wait rank0 to finish
                 #if mpi.rank == 0:

@@ -10,7 +10,7 @@ v: "apo_new_official_so_a_disabled" #should have been disabled :p
 joint_module: true
 cmb_version: "apo_new"
 selected: ["ad", "p", "o"] #ad would give a but disabled.
-cmbchain: ["a", "p", "o"] 
+cmbchain: ["a", "p"] 
 tol: 6
 beam: 1.4
 nlev_t: 6.0

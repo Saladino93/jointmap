@@ -34,7 +34,6 @@ def lensed_alpha(alm0_input, plm0_input):
         alm0_input, [dlm, None], geometry=('healpix', {'nside': nside_lens}),
         epsilon=1e-8, verbose=0)
     alm0_len = shts.map2alm(a0_len, lmax = lmax_map)
-    print("alm0_len", alm0_len.shape)
     return alm0_len
 
 
@@ -158,7 +157,7 @@ def get_input_lensed(directory, cmbversion, idx, lmax_qlm, key):
         alm0_input_lensed = lensed_alpha(alm0_input, plm0_input)
         return utils.alm_copy(alm0_input_lensed, lmax = lmax_qlm)
     else:
-        return np.zeros_like(hp.Alm.getlmax(lmax_qlm))
+        return np.zeros(hp.Alm.getsize(lmax_qlm), dtype=np.complex128)
 
 def get_reconstruction_and_input(version, qe_key, idx, cmbversion):
     """Load reconstructed alms and input alms"""
@@ -230,7 +229,7 @@ if args.itmax >= 0:
 
         inputs = recs_it[1]
         inputs_down = recs_it[2]
-        inputs_lensed = [hp.alm2cl(get_input_lensed(directory, args.cmb_version, idx, args.lmax_qlm, s)) for s in selected]
+        inputs_lensed = [get_input_lensed(directory, args.cmb_version, idx, args.lmax_qlm, s) for s in selected]
 
         for i in iters:
             phi = recs_it[0][i]
@@ -253,6 +252,7 @@ if args.itmax >= 0:
         total_qe_it = np.concatenate(total_qe_it)
         total_qe_it_cross = np.concatenate(total_qe_it_cross)
         total_qe_it_cross_down = np.concatenate(total_qe_it_cross_down)
+        total_qe_it_lensed = np.concatenate(total_qe_it_lensed)
         
         # Save iterative results
         np.save(opj(saving_directory, 
@@ -266,7 +266,7 @@ if args.itmax >= 0:
                 total_qe_it_cross_down)
 
         np.save(opj(saving_directory,
-                f"total_qe_it_lensed_{args.qe_key}_{args.v}_{args.cmb_version}_{args.imin}_{args.imax}_{args.itmax}"),
+                f"total_qe_it_cross_lensed_{args.qe_key}_{args.v}_{args.cmb_version}_{args.imin}_{args.imax}_{args.itmax}"),
                 total_qe_it_lensed)
 
 # Save outputs only on the root process

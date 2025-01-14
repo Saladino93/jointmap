@@ -1,19 +1,16 @@
-"""
-Will plot Figure for alpha, to show the power spectra, reconstructed power spectra, as well as the effect of lensing on alpha.
-"""
-
-
 import healpy as hp
 import numpy as np
 import matplotlib.pyplot as plt
-import os
-from os.path import join as opj
-
+import matplotlib.gridspec as gridspec
+from iterativefg import utils as itu
 from plancklens import utils
 
-from iterativefg import utils as itu
+# Create figure with GridSpec
+fig = plt.figure(figsize=(8, 6))
+gs = gridspec.GridSpec(2, 1, height_ratios=[4, 1], hspace=0.3)
 
-
+# Top panel (main plot)
+ax1 = fig.add_subplot(gs[0])
 
 color_palette = [
     "#377eb8",  # Blue
@@ -27,6 +24,7 @@ color_palette = [
     "#dede00"   # Yellow
 ]
 
+simidx = 12
 
 bin_edges = np.arange(2, 1000, 20)
 bin_edges = np.append(bin_edges, np.arange(1000, 4000, 50))
@@ -34,85 +32,130 @@ bin_edges = np.append(bin_edges, np.arange(1000, 4000, 50))
 cmbversion = "alpha_phi_cmb_new_rot"
 version = "alpha_phi_cmb_new_rot_test_jan_4"
 
-#plt.title(r"$\alpha$")
-
-alpha = hp.read_alm(f"/scratch/snx3000/odarwish/JOINTRECONSTRUCTION/{cmbversion}/simswalpha/sim_0012_alpha_lm.fits")
+alpha = hp.read_alm(f"/scratch/snx3000/odarwish/JOINTRECONSTRUCTION/{cmbversion}/simswalpha/sim_{simidx:04}_alpha_lm.fits")
 alpha = utils.alm_copy(alpha, 5000)
 input = hp.alm2cl(alpha)
 
-dir = f"/scratch/snx3000/odarwish/JOINTRECONSTRUCTION/{cmbversion}_version_{version}_recs/p_p_sim0012{version}/"
+dir = f"/scratch/snx3000/odarwish/JOINTRECONSTRUCTION/{cmbversion}_version_{version}_recs/p_p_sim{simidx:04}{version}/"
 plm0 = np.load(dir + "alm0_norm.npy")
 plm0_12 = np.load(dir + "alm0_11_norm.npy")
 
-# Perform calculations
-
 out_dir = "noise_biases/"
-n_gg = np.loadtxt(out_dir+"ngg_a_QE.txt") #GG_N0 * utils.cli(r_gg_fid ** 2)
+n_gg = np.loadtxt(out_dir+"ngg_a_QE.txt")
 n1_ap = np.loadtxt(out_dir+"n1_ap_QE.txt")
 n1_aa = np.loadtxt(out_dir+"n1_aa_QE.txt")
 
-
+# Plot in top panel
 cltot = hp.alm2cl(plm0)
-plt.loglog(cltot, label=r"$C_L^{\hat{\alpha}\hat{\alpha}}$", color=color_palette[0])
+ax1.loglog(cltot, label=r"$C_L^{\hat{\alpha}\hat{\alpha}}$", color=color_palette[0])
 N0_rand = hp.alm2cl(plm0_12)
-plt.loglog(N0_rand, label=r"$N_0^{\mathrm{rand}}$", color=color_palette[1])
-plt.loglog(input, label=r"$ C_L^{\alpha\alpha}$", color=color_palette[2])
-plt.plot(n_gg, label=r"$N_0^{\mathrm{th}}$", color=color_palette[3])
-#plt.plot(cltot - N0_rand, label=r"$C_L^{\hat{\alpha}\hat{\alpha}}$ - $N_0^{\mathrm{rand}}$", color=color_palette[4], alpha = 0.4)
+ax1.loglog(N0_rand, label=r"$N_0^{\mathrm{rand}}$", color=color_palette[1])
+ax1.loglog(input, label=r"$ C_L^{\alpha\alpha}$", color="black")
+ax1.plot(n_gg, label=r"$N_0^{\mathrm{th}}$", color=color_palette[2])
 
-# Calculate difference and bin
 difference = cltot - N0_rand - input[:5001]
 el, x = itu.bin_theory(difference, bin_edges)
-plt.plot(el, x, label=r"$C_L^{\hat{\alpha}\hat{\alpha}} - N_0^{\mathrm{rand}} - C_L^{\alpha\alpha}$", color=color_palette[5])
+ax1.plot(el, x, label=r"$C_L^{\hat{\alpha}\hat{\alpha}} - N_0^{\mathrm{rand}} - C_L^{\alpha\alpha}$", color=color_palette[5])
 
-#plt.plot(el, el*0+4.01177468e-09, color = "black")
-
-plt.loglog(n1_aa, color = "brown", label = r"$N_1^{\alpha\alpha}$")
-plt.loglog(n1_ap, color = "cyan", ls = "--", label = r"$N_1^{\alpha\phi}$")
+ax1.loglog(n1_aa, color="brown", label=r"$N_1^{\alpha\alpha}$")
+ax1.loglog(n1_ap, color="cyan", ls="--", label=r"$N_1^{\alpha\phi}$")
 
 reconstruction_cross = np.loadtxt(out_dir+"claa_rec.txt")
 el, x = itu.bin_theory(reconstruction_cross, bin_edges)
-plt.plot(el, x, label=r"$C_L^{\hat{\alpha}\alpha}$", color=color_palette[6])
+ax1.plot(el, x, label=r"$C_L^{\hat{\alpha}\alpha}$", color=color_palette[6])
 
 
-# Add labels and legend
-plt.ylabel("$C_L$", fontsize=18)
-plt.xlabel("$L$", fontsize=18)
-plt.legend(ncols = 2, fontsize = 12)
+"""NN = 1
+mean_i = 0
+mean_j = 0
+mean_alpha = 0
 
-plt.ylim(ymax = 1e-7)
-plt.xlim(5, 2500)
-plt.savefig("/users/odarwish/JointCMBiterative/figures/examples/N0_QE_alpha_subtraction.pdf", dpi=300)
+for i in range(NN):
 
-# Display the plot
-plt.show()
-plt.close()
+    ii = 12
+
+    cmbversion = "alpha_phi_cmb_new_rot"
+    version = "alpha_phi_cmb_new_rot_test_jan_4"
+    dir = f"/scratch/snx3000/odarwish/JOINTRECONSTRUCTION/{cmbversion}_version_{version}_recs/p_p_sim{ii:04}{version}/"
+    plm0_i = np.load(dir + "alm0_norm.npy")
+
+    alpha = hp.read_alm(f"/scratch/snx3000/odarwish/JOINTRECONSTRUCTION/alpha_phi_omega_cmb/simswalpha/sim_{ii:04}_alpha_lm.fits")
+    alpha = utils.alm_copy(alpha, 5000)
+    mean_alpha += hp.alm2cl(alpha)
+
+    dir = f"/scratch/snx3000/odarwish/JOINTRECONSTRUCTION/po_new_version_po_new_official_a_disabled_recs/p_p_sim{ii:04}po_new_official_a_disabled/"
+    plm0_j = np.load(dir + "alm0_norm.npy")
+
+    mean_i += hp.alm2cl(plm0_i)
+    mean_j += hp.alm2cl(plm0_j)
+
+mean_i /= NN
+mean_j /= NN
+mean_alpha /= NN
+
+bin_edges_ = np.arange(5, 4000, 5)
+el, meanb_i = itu.bin_theory(mean_i, bin_edges_)
+el, meanb_j = itu.bin_theory(mean_j, bin_edges_)
+el, meana = itu.bin_theory(mean_alpha, bin_edges_)
+ax1 .plot(el, (meanb_i-meana-meanb_j))"""
+
+# Customize top panel
+ax1.set_ylabel("$C_L$", fontsize=18)
+ax1.set_xlabel("$L$", fontsize=18)
+ax1.legend(ncols=2, fontsize=12)
+ax1.set_ylim(ymax=1e-7)
+
+ax1.set_xlim(5, 1000)
+
+#ax1.set_ylim(4e-8)
+#ax1.set_yscale("linear")
+
+# Increase tick label sizes
+ax1.tick_params(axis='both', which='major', labelsize=14)
+ax1.tick_params(axis='both', which='minor', labelsize=12)
+
+# Bottom panel
+ax2 = fig.add_subplot(gs[1])
+
+bin_edges = np.arange(2, 1000, 10)
+bin_edges = np.append(bin_edges, np.arange(1000, 4000, 50))
 
 
+difference = cltot - N0_rand - input[:5001]
+el, x = itu.bin_theory(difference, bin_edges)
+el, input_binned = itu.bin_theory(input[:5001], bin_edges)
+ax2.plot(el, x/input_binned, label=r"$C_L^{\hat{\alpha}\hat{\alpha}} - N_0^{\mathrm{rand}} - C_L^{\alpha\alpha}$", color=color_palette[5])
 
 signal = input
 ls = np.arange(0, len(signal), 1)
 fsky = 0.4
 Nmodes = (2*(ls+1))*fsky
 errorbar = np.sqrt(2*(signal+N0_rand)**2)/np.sqrt(Nmodes)
-#plt.errorbar(ls, signal, yerr = errorbar, fmt = "o", color = "red")
-#plt.fill_between(ls, signal-errorbar, signal+errorbar, alpha = 0.2, color = "red")
 
-plt.loglog(input, label=r"$C_L^{\alpha\alpha}$", color=color_palette[2])
+ax2.plot(el, input_binned/input_binned, label=r"$C_L^{\alpha\alpha}$", color="black")
 
-reconstruction_cross = np.loadtxt(out_dir+"claa_rec.txt")
-el, x = itu.bin_theory(reconstruction_cross, bin_edges)
-plt.plot(el, x, label=r"$C_L^{\hat{\alpha}\alpha}$", color=color_palette[6])
+el, x = itu.bin_theory(n1_aa, bin_edges)
+ax2.plot(el, x/input_binned, color="brown", label=r"$N_1^{\alpha\alpha}$")
 
-reconstruction_cross = np.loadtxt(out_dir+"claa_len_rec.txt")
-el, x = itu.bin_theory(reconstruction_cross, bin_edges)
-plt.plot(el, x, label=r"$C_L^{\hat{\alpha}\tilde{\alpha}}$", color=color_palette[5])
+# Customize bottom panel
+ax2.set_ylabel(r"$C_L/C_L^{\alpha\alpha}$", fontsize=18)
+ax2.set_xlabel(r"$L$", fontsize=18)
+#ax2.legend(ncols=3, fontsize=12)
+#ax2.set_ylim(ymin=-0.1, ymax=10)
+ax2.set_xlim(5, 1000)
 
+# Increase tick label sizes for bottom panel
+ax2.tick_params(axis='both', which='major', labelsize=14)
+ax2.tick_params(axis='both', which='minor', labelsize=12)
 
-plt.ylabel("$C_L$", fontsize=18)
-plt.xlabel("$L$", fontsize=18)
-plt.legend(ncols = 2, fontsize = 12)
+ax2.set_xscale("log")
+#ax2.set_yscale("log")
 
-plt.ylim(ymax = 1e-7)
-plt.xlim(5, 2500)
-plt.savefig("/users/odarwish/JointCMBiterative/figures/examples/QE_alpha_cross.pdf", dpi=300)
+#ax2.yaxis.set_major_locator(plt.LogLocator(numticks=2))
+ax2.yaxis.set_minor_locator(plt.LinearLocator(numticks=10))
+ax2.set_ylim(-0.1, 0.9)
+
+# Save the figure
+plt.savefig("/users/odarwish/JointCMBiterative/figures/examples/combined_alpha_plots.pdf", dpi=300, bbox_inches='tight')
+plt.show()
+plt.close()

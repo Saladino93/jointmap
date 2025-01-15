@@ -6,10 +6,10 @@ k: "p_p"
 itmax: 15
 imin: 0
 imax: 63
-v: "apo_new_official_check_factor_2" #should have been disabled :p
+v: "apo_new_official_a_disabled_check_factor_2" #should have been disabled :p
 joint_module: true
 cmb_version: "apo_new"
-selected: ["a", "p", "o"] #ad would give a but disabled.
+selected: ["ad", "p", "o"] #ad would give a but disabled.
 cmbchain: ["a", "p"]
 tol: 6
 beam: 1.0

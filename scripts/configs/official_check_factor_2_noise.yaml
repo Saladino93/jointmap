@@ -5,7 +5,7 @@ title: '$[\widehat{\alpha}\widehat{\phi}]^{D}[\alpha, \phi]$'
 k: "p_p"
 itmax: 15
 imin: 0
-imax: 63
+imax: 0
 v: "apo_new_official_check_factor_2" #should have been disabled :p
 joint_module: true
 cmb_version: "apo_new"

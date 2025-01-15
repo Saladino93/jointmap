@@ -882,7 +882,7 @@ if __name__ == '__main__':
                     N0s = 10
                     key = "p"
                     for j in range(N0s):
-                        grads_mf.calc_sims_v2(itlib, idx+j, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key)
+                        grads_mf.calc_sims_v2(itlib, idx+j, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key, idx)
                     
                 #wait rank0 to finish
                 #if mpi.rank == 0:

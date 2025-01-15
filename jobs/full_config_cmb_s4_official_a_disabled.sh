@@ -1,6 +1,6 @@
 #!/bin/sh -l
 #SBATCH --job-name=official_a_disabled
-#SBATCH --time=01:00:00
+#SBATCH --time=02:00:00
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=24
 #SBATCH --constraint=gpu
@@ -19,4 +19,6 @@ export OMP_PROC_BIND=false
 
 #srun python ../scripts/param_joint.py -c ../scripts/configs/official_a_disabled.yaml
 #srun python ../scripts/param_joint.py -c ../scripts/configs/official_a_disabled_scale_dependent.yaml
-srun python ../scripts/param_joint.py -c ../scripts/configs/official_lensing_only.yaml
+#srun python ../scripts/param_joint.py -c ../scripts/configs/official_lensing_only.yaml
+
+srun python ../scripts/param_joint.py -c ../scripts/configs/official_a_disabled_check_factor_2.yaml

@@ -6,7 +6,7 @@ k: "p_p"
 itmax: 15
 imin: 0
 imax: 31
-v: "apof_new_official" #should have been disabled :p
+v: "apof_new_official_v2" #should have been disabled :p
 joint_module: true
 cmb_version: "apof_new"
 selected: ["a", "f", "p", "o"] #ad would give a but disabled.

@@ -5,8 +5,8 @@ title: '$[\widehat{\alpha}\widehat{\phi}]^{D}[\alpha, \phi]$'
 k: "p_p"
 itmax: 15
 imin: 0
-imax: 127
-v: "po_new_official" #should have been disabled :p
+imax: 63
+v: "po_new_official_v2" #should have been disabled :p
 joint_module: true
 cmb_version: "po_new"
 selected: ["a", "p", "o"] #ad would give a but disabled.

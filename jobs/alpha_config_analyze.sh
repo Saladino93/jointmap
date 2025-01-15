@@ -18,8 +18,11 @@ export OMP_PLACES=threads
 export OMP_PROC_BIND=false
 
 #srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_so_a_disabled.yaml
-srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_a_disabled.yaml
+#srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_a_disabled.yaml
+#srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official.yaml
 #srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_multiple.yaml
 #srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_multiple_disabled.yaml
 #srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_deep_multiple.yaml
 #srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_a_disabled_scale_dependent.yaml
+#srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_lensing_only_a_disabled.yaml
+srun python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_check_factor_2.yaml

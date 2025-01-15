@@ -7,7 +7,7 @@ from plancklens.sims import cmbs, phas, maps
 from plancklens import utils
 import pickle as pk
 from lenspyx.remapping import deflection
-from lenspyx.remapping.utils_geom import Geom
+from lenspyx.remapping.utils_geom import Geom 
 from lenspyx import cachers
 
 verbose = False
@@ -146,8 +146,9 @@ class sims_cmb_len(object):
             verbose(defaults to True): lenspyx timing info printout
     """
     def __init__(self, lib_dir, lmax, cls_unl, lib_pha=None, offsets_plm=None, offsets_cmbunl=None,
-                 dlmax=1024, nside_lens=4096, facres=0, nbands=8, verbose=True, lmin_dlm = 2, extra_tlm = None, epsilon = 1e-8, 
-                 nocmb = False, zerolensing = False, zerobirefringence = True, zerocurl = True, zerotau = True, randomize_function = lambda x, idx: x):
+                 dlmax=1024, nside_lens=4096, facres=0, nbands=8, verbose=True, lmin_dlm = 2, extra_tlm = None, epsilon = 1e-10, 
+                 nocmb = False, zerolensing = False, zerobirefringence = True, zerocurl = True, zerotau = True, 
+                 cases = ["p"], randomize_function = lambda x, idx: x):
         if not os.path.exists(lib_dir) and mpi.rank == 0:
             os.makedirs(lib_dir)
         mpi.barrier()
@@ -164,17 +165,21 @@ class sims_cmb_len(object):
         self.lmax = lmax
         self.dlmax = dlmax
         self.lmax_unl = lmax + dlmax
-        self.dlmax_gl = 1024
+        self.dlmax_gl = 1024+dlmax
         # lenspyx parameters:
         self.nside_lens = nside_lens
         self.nbands = nbands
         self.facres = facres
 
         self.nocmb = nocmb
-        self.zerolensing = zerolensing
-        self.zerobirefringence = zerobirefringence
-        self.zerocurl = zerocurl
-        self.zerotau = zerotau
+        self.cases = cases
+
+        print("CMB chain", cases)
+        
+        self.zerolensing = ("p" not in cases)
+        self.zerobirefringence = ("a" not in cases)
+        self.zerocurl = ("o" not in cases)
+        self.zerotau = ("f" not in cases)
 
         self.randomize_function = randomize_function
 
@@ -235,7 +240,9 @@ class sims_cmb_len(object):
         index = self.offset_index(idx, self.offset_plm[0], self.offset_plm[1])
         try:
             pfname = os.path.join(self.lib_dir, 'sim_%04d_plm.fits' % index)
-            return hp.read_alm(pfname)*(1-self.zerolensing)
+            plm = hp.read_alm(pfname)*(1-self.zerolensing)
+            print("Getting plm sim from cache", flush = True)
+            return plm
         except:
             result = self.unlcmbs.get_sim_plm(index)*(1-self.zerolensing)
             hp.write_alm(pfname, result)
@@ -302,8 +309,19 @@ class sims_cmb_len(object):
     @staticmethod
     def rotate_polarization(Q, U, angle):
         c, s = np.cos(2*angle), np.sin(2*angle)
-        Qrot = Q * c + U * s
-        Urot = - Q * s + U * c
+        #c, s = ne.evaluate('cos(2 * angle)'), ne.evaluate('sin(2 * angle)')
+        #Qrot = ne.evaluate('Q * c - U * s')
+        #Urot = ne.evaluate('Q * s + U * c')
+
+        #Qrot = Q * c + U * s
+        #Urot = - Q * s + U * c
+        Qrot = Q * c - U * s
+        Urot = Q * s + U * c
+
+        #QU = Q + 1j * U
+        #QU *= np.exp(1j * 2*angle)
+        #QU *= ne.evaluate('exp(1j * 2*angle)')
+        #Qrot, Urot = np.real(QU), np.imag(QU)
         return Qrot, Urot
     
 
@@ -318,50 +336,78 @@ class sims_cmb_len(object):
     def _get_f(self, idx):
         dlm, dclm, lmax_dlm, mmax_dlm = self._get_dlm(idx)
         lenjob_geometry = Geom.get_thingauss_geometry(self.lmax_unl + self.dlmax_gl, 2)
-        f = deflection(lenjob_geometry, dlm, mmax_dlm, cacher=cachers.cacher_mem(safe=False), dclm=dclm,
+        f = deflection(lenjob_geometry, dlm, mmax_dlm, cacher=cachers.cacher_mem(safe=False), #dclm=dclm,
                        epsilon=self.epsilon)
         return f
+
+
+    def apply(self, case, elm, blm, idx):
+        """
+        Apply different transformations to the E and B mode polarization fields.
+        This function implements a clean pipeline of transformations without conditional flags.
         
+        Parameters:
+        -----------
+        case : str
+            The type of transformation to apply:
+            - "p" for lensing
+            - "a" for birefringence (alpha rotation)
+            - "f" for patchy tau effects
+        elm : array
+            E-mode spherical harmonic coefficients
+        blm : array
+            B-mode spherical harmonic coefficients
+        idx : int
+            Index of the simulation
+            
+        Returns:
+        --------
+        elm, blm : tuple
+            Transformed E and B mode coefficients
+        """
+        if case == "a":
+            # Birefringence case: rotate polarization
+            alpha_lm = self.get_sim_alpha_lm(idx)
+            nside_rotation = self.nside_lens
+            alpha = hp.alm2map(alpha_lm, nside=nside_rotation)
+            lmax_map = hp.Alm.getlmax(elm.size)
+            Q, U = hp.alm2map_spin([elm, blm], spin=2, nside=nside_rotation, lmax=lmax_map)
+            Q, U = self.rotate_polarization(Q, U, alpha)
+            elm, blm = hp.map2alm_spin([Q, U], 2, lmax=lmax_map)
+            del Q, U
+        elif case == "f":
+            # Patchy tau case: apply patchy tau ampl
+            tau_lm = self.get_sim_tau_lm(idx)
+            tau = hp.alm2map(tau_lm, nside=self.nside_lens)
+            lmax_map = hp.Alm.getlmax(elm.size)
+            Q, U = hp.alm2map_spin([elm, blm], spin=2, nside=self.nside_lens, lmax=lmax_map)
+            Q, U = self.patchy_tau(Q, U, tau)
+            elm, blm = hp.map2alm_spin([Q, U], 2, lmax=lmax_map)
+            del Q, U
+        elif case == "p":
+            # Lensing case: apply lensing transformation
+            dlm, dclm, _, _ = self._get_dlm(idx)
+            lmax_map = hp.Alm.getlmax(elm.size)
+            Qlen, Ulen = self.lens_module.alm2lenmap_spin(
+                [elm, blm], [dlm, dclm], 2,
+                geometry=('healpix', {'nside': self.nside_lens}),
+                epsilon=self.epsilon, verbose=0
+            )
+            elm, blm = hp.map2alm_spin([Qlen, Ulen], 2, lmax=lmax_map)
+            del Qlen, Ulen
+        elif case == "o":
+            return elm, blm #already done with "p", though should put o only case..., perhaps, _get_dlm should return only a field based on cases
+                
+        return elm, blm
     
     def _cache_eblm(self, idx):
         elm = self.unlcmbs.get_sim_elm(self.offset_index(idx, self.offset_cmb[0], self.offset_cmb[1]))
         blm = None if 'b' not in self.fields else self.unlcmbs.get_sim_blm(self.offset_index(idx, self.offset_cmb[0], self.offset_cmb[1]))
 
-        if not self.zerobirefringence:
-            print('Rotating polarization', flush = True)
-            alpha_lm = self.get_sim_alpha_lm(idx)
-            alpha = hp.alm2map(alpha_lm, nside = self.nside_lens)
-            lmax_map = hp.Alm.getlmax(elm.size)
-            Q, U = hp.alm2map_spin([elm, blm], spin = 2, nside = self.nside_lens, lmax = lmax_map)
-            Q, U = self.rotate_polarization(Q, U , alpha)
-            elm, blm = hp.map2alm_spin([Q, U], 2, lmax = lmax_map)
-            
-            del Q, U
-
-
-        if not self.zerotau:
-            print('Patching tau', flush = True)
-            tau_lm = self.get_sim_tau_lm(idx)
-            tau = hp.alm2map(tau_lm, nside = self.nside_lens)
-            lmax_map = hp.Alm.getlmax(elm.size)
-            Q, U = hp.alm2map_spin([elm, blm], spin = 2, nside = self.nside_lens, lmax = lmax_map)
-            Q, U = self.patchy_tau(Q, U, tau)
-            elm, blm = hp.map2alm_spin([Q, U], 2, lmax = lmax_map)
-            del Q, U
-
-        if not self.zerolensing:
-            if True:
-                dlm, dclm, _, _ = self._get_dlm(idx)
-                lmax_map = hp.Alm.getlmax(elm.size)
-                Qlen, Ulen = self.lens_module.alm2lenmap_spin([elm, blm], [dlm, dclm], 2, geometry = ('healpix', {'nside': self.nside_lens}), epsilon = self.epsilon, verbose = 0)
-                elm, blm = hp.map2alm_spin([Qlen, Ulen], 2, lmax=lmax_map)
-                del Qlen, Ulen
-            else:
-                f = self._get_f(idx)
-                eblm = np.array([elm, blm])
-                eblm = f.lensgclm(eblm, self.lmax_unl, 2, self.lmax, self.lmax)
-                elm, blm = eblm
-
+        print("Building CMB", self.cases)
+        for case in self.cases:
+            print("Applying %s" % case)
+            elm, blm = self.apply(case, elm, blm, idx)
 
         elm = utils.alm_copy(elm, self.lmax)
         blm = utils.alm_copy(blm, self.lmax)
@@ -374,29 +420,17 @@ class sims_cmb_len(object):
         
         fname = os.path.join(self.lib_dir, 'sim_%04d_tlm.fits' % idx)
 
-        pfname = os.path.join(self.lib_dir, 'sim_%04d_plm.fits' % idx)
-
-        ofname = os.path.join(self.lib_dir, 'sim_%04d_olm.fits' % idx)
-
         if not os.path.exists(fname):
-            #print("Offset index", idx, self.offset_index(idx, self.offset_cmb[0], self.offset_cmb[1]))
-            #print("Offset index 5", self.offset_index(5, self.offset_cmb[0], self.offset_cmb[1]))
-            #print("FIXED INDEX", fixed_index)
             
             tlm = self.unlcmbs.get_sim_tlm(self.offset_index(idx if fixed_index is None else fixed_index, self.offset_cmb[0], self.offset_cmb[1]))
-            dlm = self.get_sim_plm(idx)
-            plm = dlm.copy()
-            
-            dlm = self.get_sim_olm(idx)
-            olm = dlm.copy()
 
             dlm, dclm, _, _ = self._get_dlm(idx)
 
             #assert 'o' not in self.fields, 'not implemented'
 
-            lmaxd = hp.Alm.getlmax(dlm.size)
-            p2d = np.sqrt(np.arange(lmaxd + 1, dtype=float) * np.arange(1, lmaxd + 2))
-            p2d[:self.lmin_dlm] = 0
+            #lmaxd = hp.Alm.getlmax(dlm.size)
+            #p2d = np.sqrt(np.arange(lmaxd + 1, dtype=float) * np.arange(1, lmaxd + 2))
+            #p2d[:self.lmin_dlm] = 0
 
             #hp.almxfl(dlm, p2d, inplace=True)
             #hp.almxfl(dclm, p2d, inplace=True)
@@ -405,9 +439,9 @@ class sims_cmb_len(object):
 
             hp.write_alm(fname, hp.map2alm(Tlen, lmax=self.lmax, iter=0))
 
-            hp.write_alm(pfname, plm)
-
-            hp.write_alm(ofname, olm)
+            #if (not os.path.exists(pfname)):
+            #    hp.write_alm(pfname, plm)
+            #    hp.write_alm(ofname, olm)
 
 
         if (self.extra_tlm is not None):
@@ -417,10 +451,10 @@ class sims_cmb_len(object):
                 hp.write_alm(extrafname, extra_tlm)
 
         total = hp.read_alm(fname)*(1-self.nocmb) #if to account or not for CMB contribution
-        print("CMB contribution is", total)
+        #print("CMB contribution is", total)
 
         if self.extra_tlm is not None:
-            print('NOTE: adding extra tlm', flush = True)
+            #print('NOTE: adding extra tlm', flush = True)
             total += hp.read_alm(extrafname)
 
         return self.randomize_function(total, idx)

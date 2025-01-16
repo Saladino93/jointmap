@@ -130,7 +130,17 @@ args = SimpleNamespace(**merged_args)
 
 randomize_function = (lambda x, idx: x) #if not args.randomize else randomizing_fg
 
-get_aniso_index = {"a": lambda x: 0, "p": lambda x: x, "o": lambda x: x, "f": lambda x: x}
+#get_aniso_index = {"a": lambda x: 0, "p": lambda x: x, "o": lambda x: x, "f": lambda x: x}
+
+def get_aniso_index(index, source):
+    if source == "a":
+        return 0
+    elif source == "p":
+        return index
+    elif source == "o":
+        return index
+    elif source == "f":
+        return index
 
 def process_strings(strings):
     return list(map(lambda s: s[0] if len(s) == 2 else s, strings)), list(map(lambda s: len(s) == 2, strings))

@@ -3,12 +3,13 @@
 import numpy as np, healpy as hp
 import os
 from plancklens.helpers import mpi
-from plancklens.sims import cmbs, phas, maps
+from plancklens.sims import phas, maps
 from plancklens import utils
 import pickle as pk
 from lenspyx.remapping import deflection
 from lenspyx.remapping.utils_geom import Geom 
 from lenspyx import cachers
+from jointmap.sims import cmbs
 
 verbose = False
 

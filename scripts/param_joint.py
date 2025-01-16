@@ -239,7 +239,7 @@ import copy
 
 
 #"""
-cls_path = opj(os.environ['HOME'], 'fgcmblensing', 'input', 'giulio')
+cls_path = opj(os.environ['HOME'], 'jointmap', 'data')
 cls_unl = utils.camb_clfile(opj(cls_path, 'lensedCMB_dmn1_lenspotentialCls.dat'))
 cls_len = utils.camb_clfile(opj(cls_path, 'lensedCMB_dmn1_lensedCls.dat'))
 cls_grad = camb_clfile_gradient(opj(cls_path, 'lensedCMB_dmn1_lensedgradCls.dat'))

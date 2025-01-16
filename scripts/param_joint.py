@@ -130,6 +130,8 @@ args = SimpleNamespace(**merged_args)
 
 randomize_function = (lambda x, idx: x) #if not args.randomize else randomizing_fg
 
+get_aniso_index = {"a": lambda x: 0, "p": lambda x: x, "o": lambda x: x, "f": lamba x: x}
+
 def process_strings(strings):
     return list(map(lambda s: s[0] if len(s) == 2 else s, strings)), list(map(lambda s: len(s) == 2, strings))
 
@@ -349,7 +351,7 @@ mpi.barrier()
 #cmb_len = sims_cmb_len(DATDIR, lmax_transfer, cls_unl, lib_pha = cmb_phas, epsilon=1e-7, zerolensing = zero_lensing, zerobirefringence = zero_birefringence)
 #cmb_len_wcurl = sims_cmb_len(DATDIRwcurl, lmax_transfer, cls_unl_wcurl, lib_pha = cmb_phas, epsilon=1e-7)
 
-cmb_len_walpha = sims_cmb_len(DATDIRwalpha, lmax_unl_generation, cls_unl_walpha, lib_pha = cmb_phas, epsilon=1e-7, randomize_function = randomize_function, cases = args.cmbchain)
+cmb_len_walpha = sims_cmb_len(DATDIRwalpha, lmax_unl_generation, cls_unl_walpha, lib_pha = cmb_phas, epsilon=1e-7, randomize_function = randomize_function, cases = args.cmbchain, get_aniso_index = get_aniso_index)
 
 #sims      = maps.cmb_maps_harmonicspace(cmb_len, cls_transf, cls_noise, noise_phas)
 #sims_wcurl = maps.cmb_maps_harmonicspace(cmb_len_wcurl, cls_transf, cls_noise, noise_phas)

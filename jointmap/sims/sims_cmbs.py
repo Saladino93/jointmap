@@ -148,7 +148,7 @@ class sims_cmb_len(object):
     def __init__(self, lib_dir, lmax, cls_unl, lib_pha=None, offsets_plm=None, offsets_cmbunl=None,
                  dlmax=1024, nside_lens=4096, facres=0, nbands=8, verbose=True, lmin_dlm = 2, extra_tlm = None, epsilon = 1e-10, 
                  nocmb = False, zerolensing = False, zerobirefringence = True, zerocurl = True, zerotau = True, 
-                 cases = ["p"], randomize_function = lambda x, idx: x):
+                 cases = ["p"], randomize_function = lambda x, idx: x, get_aniso_index = None):
         if not os.path.exists(lib_dir) and mpi.rank == 0:
             os.makedirs(lib_dir)
         mpi.barrier()
@@ -182,6 +182,8 @@ class sims_cmb_len(object):
         self.zerotau = ("f" not in cases)
 
         self.randomize_function = randomize_function
+
+        self.get_aniso_index = get_aniso_index
 
         self.unlcmbs = cmbs.sims_cmb_unl(cls_unl, lib_pha)
         self.lib_dir = lib_dir
@@ -341,7 +343,7 @@ class sims_cmb_len(object):
         return f
 
 
-    def apply(self, case, elm, blm, idx):
+    def apply(self, case, elm, blm, idx, get_index = lambda x: x):
         """
         Apply different transformations to the E and B mode polarization fields.
         This function implements a clean pipeline of transformations without conditional flags.
@@ -359,6 +361,8 @@ class sims_cmb_len(object):
             B-mode spherical harmonic coefficients
         idx : int
             Index of the simulation
+        get_index: function
+            Function to get the index of the simulation. It can be a fixed for example.
             
         Returns:
         --------
@@ -367,7 +371,7 @@ class sims_cmb_len(object):
         """
         if case == "a":
             # Birefringence case: rotate polarization
-            alpha_lm = self.get_sim_alpha_lm(idx)
+            alpha_lm = self.get_sim_alpha_lm(get_index(idx, case))
             nside_rotation = self.nside_lens
             alpha = hp.alm2map(alpha_lm, nside=nside_rotation)
             lmax_map = hp.Alm.getlmax(elm.size)
@@ -377,7 +381,7 @@ class sims_cmb_len(object):
             del Q, U
         elif case == "f":
             # Patchy tau case: apply patchy tau ampl
-            tau_lm = self.get_sim_tau_lm(idx)
+            tau_lm = self.get_sim_tau_lm(get_index(idx, case))
             tau = hp.alm2map(tau_lm, nside=self.nside_lens)
             lmax_map = hp.Alm.getlmax(elm.size)
             Q, U = hp.alm2map_spin([elm, blm], spin=2, nside=self.nside_lens, lmax=lmax_map)
@@ -386,7 +390,7 @@ class sims_cmb_len(object):
             del Q, U
         elif case == "p":
             # Lensing case: apply lensing transformation
-            dlm, dclm, _, _ = self._get_dlm(idx)
+            dlm, dclm, _, _ = self._get_dlm(get_index(idx, case))
             lmax_map = hp.Alm.getlmax(elm.size)
             Qlen, Ulen = self.lens_module.alm2lenmap_spin(
                 [elm, blm], [dlm, dclm], 2,
@@ -407,7 +411,7 @@ class sims_cmb_len(object):
         print("Building CMB", self.cases)
         for case in self.cases:
             print("Applying %s" % case)
-            elm, blm = self.apply(case, elm, blm, idx)
+            elm, blm = self.apply(case, elm, blm, idx, get_index = self.get_aniso_index)
 
         elm = utils.alm_copy(elm, self.lmax)
         blm = utils.alm_copy(blm, self.lmax)

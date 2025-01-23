@@ -114,6 +114,7 @@ parser.add_argument('-do_mf', dest = 'do_mf', action = 'store_true', help = 'do 
 parser.add_argument('-cmbchain', dest='cmbchain', nargs='+',  default = "p", help="List of operators to apply to CMB.")
 
 parser.add_argument('-zero_starting', dest='zero_starting', nargs='+',  default = "", help="Zero starting points.")
+parser.add_argument('-getrdn0', dest = 'getrdn0', action = 'store_true', help = 'Get RDN0.')
 
 
 args = parser.parse_args()
@@ -132,9 +133,14 @@ randomize_function = (lambda x, idx: x) #if not args.randomize else randomizing_
 
 #get_aniso_index = {"a": lambda x: 0, "p": lambda x: x, "o": lambda x: x, "f": lambda x: x}
 
+def get_index(index, first_range=500, subsequent_range=32):
+    if index < first_range:
+        return 0
+    #return (index - first_range) // subsequent_range + 1
+
 def get_aniso_index(index, source):
     if source == "a":
-        return 0
+        return index #get_index(index)
     elif source == "p":
         return index
     elif source == "o":
@@ -160,7 +166,7 @@ lmax_unl, mmax_unl = args.lmax_unl, args.mmax_unl  # Delensed CMB is reconstruct
 
 nside = 2048
 dlmax = 1024
-lmax_unl_generation = 5000 #lmax for saving without CMBs
+lmax_unl_generation = 5001 #lmax for saving without CMBs
 
 Lmin = args.Lmin
 
@@ -533,7 +539,7 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
         Rpa = qresp.get_response('p' + k[1:], lmax_ivf, 'a', cls_len, cls_grad, {'e': fel, 'b': fbl, 't': ftl},
                                     lmax_qlm=lmax_qlm)[0]
 
-        np.savetxt("resps.txt", np.c_[Rpp, Rff, Rpf_unl, Rfp_unl, Rff_bh_p, Rap, Rap, Rpa, Rpa], header="Rpp, Rff, Rpf_unl, Rfp_unl, Rff_bh_p, Rap, Rao, Rpa, Roa")
+        #np.savetxt("resps.txt", np.c_[Rpp, Rff, Rpf_unl, Rfp_unl, Rff_bh_p, Rap, Rap, Rpa, Rpa], header="Rpp, Rff, Rpf_unl, Rfp_unl, Rff_bh_p, Rap, Rao, Rpa, Roa")
     
     #flm0_bh = alm_copy(flm0_bh, None, lmax_qlm, mmax_qlm)
     #almxfl(flm0_bh, utils.cli(Rff_bh_p), mmax_qlm, True)  # Normalized QE
@@ -846,7 +852,9 @@ if __name__ == '__main__':
     soltn_cond = lambda it: True # Uses (or not) previous E-mode solution as input to search for current iteration one
 
 
-    maximum = args.itmax+2
+    #maximum = args.itmax+1 #NOTE!!!
+
+    maximum = args.itmax+40
 
     mpi.barrier = lambda : 1 # redefining the barrier (Why ? )
     from delensalot.core.iterator.statics import rec as Rec
@@ -858,6 +866,8 @@ if __name__ == '__main__':
 
     if mpi.rank ==0:
         print("Caching things in " + TEMP)
+
+    print("JOBS", jobs)
 
 
     for idx in jobs[mpi.rank::mpi.size]:
@@ -877,11 +887,11 @@ if __name__ == '__main__':
                     print("****Starting with mean field****")
 
                     base = 2000
-                    Nmf = 15
+                    Nmf = 2
                     key = "p"
                     
                     #give this to other ranks
-                    simidxs = np.arange(idx+base, idx+base+Nmf)
+                    simidxs = np.arange(Nmf*idx+base, Nmf*idx+base+Nmf)
                     grads_mf.get_graddet_sim_mf_trick(itlib, i, simidxs, 
                                 key, libPHASCMB_mf, zerolensing = False, recache = False)
 
@@ -889,13 +899,16 @@ if __name__ == '__main__':
                 itlib.iterate(i, 'p')
                 print("done iter " + str(i))
 
-                if i == args.itmax:
+                if (i == args.itmax) and args.getrdn0:
                     print("**Get N0 sims**")
-                    N0s = 10
+                    #N0s = 32
+                    N0s = 30
                     key = "p"
-                    for j in range(N0s):
-                        grads_mf.calc_sims_v2(itlib, idx+j, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key, idx)
-                    
+                    #for j in range(N0s):
+                    #grads_mf.calc_sims_v2(itlib, j, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key, idx)
+                    simset = np.arange(N0s)
+                    grads_mf.calc_sims_v3(itlib, simset, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key, idx, lib_dir_iterator)
+                #"""
                 #wait rank0 to finish
                 #if mpi.rank == 0:
                 #    itlib.iterate(i, 'p')

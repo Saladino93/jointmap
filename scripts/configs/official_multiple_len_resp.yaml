@@ -3,14 +3,17 @@
 #the rotation effect is disabled as an operator
 title: '$[\widehat{\alpha}\widehat{\phi}]^{D}[\alpha, \phi]$'
 k: "p_p"
-itmax: 5
-imin: 1
-imax: 1
-v: "apof_new_official_lensed_response"
+itmax: 15
+imin: 0
+imax: 15
+v: "afpo_04_02_v2"
 joint_module: true
-cmb_version: "apof_new"
-selected: ["a", "f", "p", "o"] #ad would give a but disabled.
+do_mf: true
+getrdn0: false
+cmb_version: "afpo" #we also add f
+selected: ["a", "f", "p", "o"] #["a", "f", "p", "o"] #["a", "f", "p", "o"] #ad would give a but disabled.
 cmbchain: ["a", "f", "p", "o"]
+#zero_starting: ["a", "f", "p", "o"]
 tol: 6
 beam: 1.0
 nlev_t: 1.0

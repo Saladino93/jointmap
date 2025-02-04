@@ -5,12 +5,14 @@ title: '$[\widehat{\alpha}\widehat{\phi}]^{D}[\alpha, \phi]$'
 k: "p_p"
 itmax: 15
 imin: 0
-imax: 63
-v: "apo_new_official_check_factor_2" #should have been disabled :p
+imax: 127
+do_mf: False
+v: "apo_new_official_check_factor_2_vofficial_no_alpha_a_disabled" #should have been disabled :p
+getrdn0: true
 joint_module: true
-cmb_version: "apo_new"
-selected: ["a", "p", "o"] #ad would give a but disabled.
-cmbchain: ["a", "p"]
+cmb_version: "apo_new_v2_no_alpha"
+selected: ["ad", "p", "o"] #ad would give a but disabled.
+cmbchain: ["p"]
 tol: 6
 beam: 1.0
 nlev_t: 1.0

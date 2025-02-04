@@ -17,5 +17,5 @@ export HOME=/home/users/d/darwish/
 export SCRATCH=/home/users/d/darwish/scratch
 
 
-srun ~/.conda/envs/lenscarf/bin/python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_prova.yaml
-srun ~/.conda/envs/lenscarf/bin/python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_prova_no_alpha.yaml
+srun ~/.conda/envs/lenscarf/bin/python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_new.yaml
+#srun ~/.conda/envs/lenscarf/bin/python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_prova_no_alpha.yaml

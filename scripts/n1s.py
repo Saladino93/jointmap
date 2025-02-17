@@ -71,7 +71,7 @@ cls_ivfs_arr = utils.cls_dot([fals, dat_cls, fals])
 from plancklens.n1 import n1
 
 lib_dir = './n1s_ranks'
-n1lib = n1.library_n1(lib_dir, cls_len['tt'], cls_len['te'], cls_len['ee'], lmaxphi=2500, dL=10, lps=None)
+n1lib = n1.library_n1(lib_dir, cls_len['tt'], cls_len['te'], cls_len['ee'], lmaxphi=4000, dL=10, lps=None)
 #n1_aa = n1lib.get_n1('a_p', 'a', cls_alpha, ftl, fel, fbl, lmax_qlm)
 n1_ap = n1lib.get_n1('a_p', 'p', cls_unl['pp'], ftl, fel, fbl, lmax_qlm)
 n1_pa = n1lib.get_n1('p_p', 'a', cls_alpha, ftl, fel, fbl, lmax_qlm)

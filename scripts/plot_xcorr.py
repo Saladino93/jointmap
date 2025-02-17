@@ -7,7 +7,7 @@ import numpy as np
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--config", nargs='+', default="official_check_factor_2") #config_paths = ["official_multiple", "official_check_factor_2", "official_so_a_disabled", "official_multiple_disabled"]
+parser.add_argument("--config", nargs='+', default="spt3g") #config_paths = ["official_multiple", "official_check_factor_2", "official_so_a_disabled", "official_multiple_disabled"]
 parser.add_argument("--key", type=str, default="a") #a cosmic birefringence, p lensing potential, o lensing curl, f patchy
 args = parser.parse_args()
 config = args.config

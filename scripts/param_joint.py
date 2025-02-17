@@ -24,6 +24,8 @@ Testing with CMB lensing only reconstruction, new module
 """
 
 
+import jointmap
+
 import os
 from os.path import join as opj
 import numpy as np
@@ -44,11 +46,8 @@ from lenspyx.utils import cli
 from lenspyx.utils_hp import gauss_beam, almxfl, alm2cl, alm_copy
 from lenspyx import cachers
 
-from delensalot.utility import utils_steps
 from delensalot.core.iterator import steps
 from delensalot.core import mpi
-
-from delensalot.core.iterator.cs_iterator_multi import iterator_cstmf as iterator_cstmf_wcurl
 
 from jointmap.sims.sims_cmbs import sims_cmb_len
 import healpy as hp
@@ -114,6 +113,7 @@ parser.add_argument('-do_mf', dest = 'do_mf', action = 'store_true', help = 'do 
 parser.add_argument('-cmbchain', dest='cmbchain', nargs='+',  default = "p", help="List of operators to apply to CMB.")
 
 parser.add_argument('-zero_starting', dest='zero_starting', nargs='+',  default = "", help="Zero starting points.")
+parser.add_argument('-getrdn0', dest = 'getrdn0', action = 'store_true', help = 'Get RDN0.')
 
 
 args = parser.parse_args()
@@ -129,6 +129,23 @@ args = SimpleNamespace(**merged_args)
 
 
 randomize_function = (lambda x, idx: x) #if not args.randomize else randomizing_fg
+
+#get_aniso_index = {"a": lambda x: 0, "p": lambda x: x, "o": lambda x: x, "f": lambda x: x}
+
+def get_index(index, first_range=500, subsequent_range=32):
+    if index < first_range:
+        return 0
+    #return (index - first_range) // subsequent_range + 1
+
+def get_aniso_index(index, source):
+    if source == "a":
+        return index #get_index(index)
+    elif source == "p":
+        return index
+    elif source == "o":
+        return index
+    elif source == "f":
+        return index
 
 def process_strings(strings):
     return list(map(lambda s: s[0] if len(s) == 2 else s, strings)), list(map(lambda s: len(s) == 2, strings))
@@ -148,7 +165,7 @@ lmax_unl, mmax_unl = args.lmax_unl, args.mmax_unl  # Delensed CMB is reconstruct
 
 nside = 2048
 dlmax = 1024
-lmax_unl_generation = 5000 #lmax for saving without CMBs
+lmax_unl_generation = 5001 #lmax for saving without CMBs
 
 Lmin = args.Lmin
 
@@ -237,7 +254,7 @@ import copy
 
 
 #"""
-cls_path = opj(os.environ['HOME'], 'fgcmblensing', 'input', 'giulio')
+cls_path = opj(os.path.dirname(jointmap.__file__), '../data')
 cls_unl = utils.camb_clfile(opj(cls_path, 'lensedCMB_dmn1_lenspotentialCls.dat'))
 cls_len = utils.camb_clfile(opj(cls_path, 'lensedCMB_dmn1_lensedCls.dat'))
 cls_grad = camb_clfile_gradient(opj(cls_path, 'lensedCMB_dmn1_lensedgradCls.dat'))
@@ -277,8 +294,7 @@ cls_alpha = 10**(-args.ACB)*2*np.pi/(ell*(ell+1))**(args.ns)
 cls_alpha[0] = 0
 cls_unl_walpha["aa"] = cls_alpha
 
-HOME = os.environ['HOME']
-tau_dir = opj(HOME, 'jointmap', 'data', 'tau_lensing_data')
+tau_dir = opj(os.path.dirname(jointmap.__file__), '../data', 'tau_lensing_data')
 tau_phi = np.loadtxt(opj(tau_dir, "theory_spectra_optimistic_ptau.txt"))
 tau_tau = np.loadtxt(opj(tau_dir, "theory_spectra_optimistic_tautau.txt")) 
 tau_tau[1] = cls_unl_walpha["pp"][1]
@@ -286,22 +302,7 @@ tau_phi[1] = cls_unl_walpha["pp"][1]
 cls_unl_walpha["ff"] = tau_tau[:ell.size]
 cls_unl_walpha["fp"] = tau_phi[:ell.size]*0.
 
-
 print(cls_unl_walpha.keys())
-
-"""
-fields_ = ['p', 'f', 't', 'e', 'b', 'o', 'a']
-
-result = {}
-for i1, k1 in enumerate(fields_):
-    for k2 in fields_[i1:]:
-        if k1+k2 in cls_unl_walpha.keys():
-            result[k1+k2] = cls_unl_walpha[k1+k2]
-        elif k2+k1 in cls_unl_walpha.keys():
-            result[k1+k2] = cls_unl_walpha[k2+k1]
-
-
-cls_unl_walpha = copy.deepcopy(result)"""
 
 print(cls_unl_walpha.keys())
 
@@ -349,7 +350,7 @@ mpi.barrier()
 #cmb_len = sims_cmb_len(DATDIR, lmax_transfer, cls_unl, lib_pha = cmb_phas, epsilon=1e-7, zerolensing = zero_lensing, zerobirefringence = zero_birefringence)
 #cmb_len_wcurl = sims_cmb_len(DATDIRwcurl, lmax_transfer, cls_unl_wcurl, lib_pha = cmb_phas, epsilon=1e-7)
 
-cmb_len_walpha = sims_cmb_len(DATDIRwalpha, lmax_unl_generation, cls_unl_walpha, lib_pha = cmb_phas, epsilon=1e-7, randomize_function = randomize_function, cases = args.cmbchain)
+cmb_len_walpha = sims_cmb_len(DATDIRwalpha, lmax_unl_generation, cls_unl_walpha, lib_pha = cmb_phas, epsilon=1e-7, randomize_function = randomize_function, cases = args.cmbchain, get_aniso_index = get_aniso_index)
 
 #sims      = maps.cmb_maps_harmonicspace(cmb_len, cls_transf, cls_noise, noise_phas)
 #sims_wcurl = maps.cmb_maps_harmonicspace(cmb_len_wcurl, cls_transf, cls_noise, noise_phas)
@@ -437,7 +438,7 @@ def get_n0_iter(k='p_p'):
     return cacher_wcurl.load(fnN0s), delclsdict
 
 # -------------------------
-def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
+def get_itlib(k:str, simidx:int, version:str, cg_tol:float, sim_rank):
     """Return iterator instance for simulation idx and qe_key type k
         Args:
             k: 'p_p' for Pol-only, 'ptt' for T-only, 'p_eb' for EB-only, etc
@@ -448,7 +449,9 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     """
     libdir_iterator = libdir_iterators(k, simidx, version)
     if not os.path.exists(libdir_iterator):
-        os.makedirs(libdir_iterator)
+        if mpi.rank == sim_rank:
+            os.makedirs(libdir_iterator)
+    mpi.barrier()
     tr = int(os.environ.get('OMP_NUM_THREADS', cpu_count(logical=False)))
     print("Using %s threads"%tr)
 
@@ -510,7 +513,7 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
         Rff_bh_p = qresp.get_response('f_p_bh_p', lmax_ivf, 'f', cls_len, cls_grad, {'e': fel, 'b': fbl, 't': ftl},
                                     lmax_qlm=lmax_qlm)[0]
 
-        Rpf_unl, Rof_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'f', cls_len, cls_grad,
+        """Rpf_unl, Rof_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'f', cls_len, cls_grad,
                 {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
         Rfp_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'p', cls_len, cls_grad,  
                                         {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
@@ -519,9 +522,9 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
                                     lmax_qlm=lmax_qlm)[0]
         
         Rpa = qresp.get_response('p' + k[1:], lmax_ivf, 'a', cls_len, cls_grad, {'e': fel, 'b': fbl, 't': ftl},
-                                    lmax_qlm=lmax_qlm)[0]
+                                    lmax_qlm=lmax_qlm)[0]"""
 
-        np.savetxt("resps.txt", np.c_[Rpp, Rff, Rpf_unl, Rfp_unl, Rff_bh_p, Rap, Rap, Rpa, Rpa], header="Rpp, Rff, Rpf_unl, Rfp_unl, Rff_bh_p, Rap, Rao, Rpa, Roa")
+        #np.savetxt("resps.txt", np.c_[Rpp, Rff, Rpf_unl, Rfp_unl, Rff_bh_p, Rap, Rap, Rpa, Rpa], header="Rpp, Rff, Rpf_unl, Rfp_unl, Rff_bh_p, Rap, Rao, Rpa, Roa")
     
     #flm0_bh = alm_copy(flm0_bh, None, lmax_qlm, mmax_qlm)
     #almxfl(flm0_bh, utils.cli(Rff_bh_p), mmax_qlm, True)  # Normalized QE
@@ -552,11 +555,11 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     shift_1, shift_2 = 1000, 2000
     """plm0_12 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_2) - mf0_p
     plm0_21 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_1) - mf0_p"""
-    plm0_11 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_1) - mf0_p
+    plm0_11 = 0#qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_1) - mf0_p
     #plm0_22 = qlms_dd_QE.get_sim_qlm('p' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_2) - mf0_p
     """plm0_12 = process_xlm0(plm0_12, Rpp, WF_p, cpp > 0, "plm0_12")
     plm0_21 = process_xlm0(plm0_21, Rpp, WF_p, cpp > 0, "plm0_21")"""
-    plm0_11 = process_xlm0(plm0_11, Rpp, WF_p, cpp > 0, "plm0_11")
+    plm0_11 = 0#process_xlm0(plm0_11, Rpp, WF_p, cpp > 0, "plm0_11")
     #plm0_22 = process_xlm0(plm0_22, Rpp, WF_p, cpp > 0, "plm0_22")
 
 
@@ -568,12 +571,12 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
     """olm0_12 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_2) - mf0_o
     olm0_21 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_1) - mf0_o"""
-    olm0_11 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_1) - mf0_o
+    olm0_11 = 0#qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_1) - mf0_o
     #olm0_22 = qlms_dd_QE.get_sim_qlm('x' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_2) - mf0_o
 
     """olm0_12 = process_xlm0(olm0_12, Roo, WF_o, coo > 0, "olm0_12")
     olm0_21 = process_xlm0(olm0_21, Roo, WF_o, coo > 0, "olm0_21")"""
-    olm0_11 = process_xlm0(olm0_11, Roo, WF_o, coo > 0, "olm0_11")
+    olm0_11 = 0#process_xlm0(olm0_11, Roo, WF_o, coo > 0, "olm0_11")
     #olm0_22 = process_xlm0(olm0_22, Roo, WF_o, coo > 0, "olm0_22")
 
 
@@ -586,12 +589,12 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
         """alm0_12 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_2) - mf0_p
         alm0_21 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_1) - mf0_p"""
-        alm0_11 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_1) - mf0_p
+        alm0_11 = 0#qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_1) - mf0_p
         #alm0_22 = qlms_dd_QE.get_sim_qlm('a' + k[1:], int(simidx), shift_1 = shift_2, shift_2 = shift_2) - mf0_p
 
         """alm0_12 = process_xlm0(alm0_12, Raa, WF_a, cpp > 0, "alm0_12")
         alm0_21 = process_xlm0(alm0_21, Raa, WF_a, cpp > 0, "alm0_21")"""
-        alm0_11 = process_xlm0(alm0_11, Raa, WF_a, cpp > 0, "alm0_11")
+        alm0_11 = 0#process_xlm0(alm0_11, Raa, WF_a, cpp > 0, "alm0_11")
         #alm0_22 = process_xlm0(alm0_22, Raa, WF_a, cpp > 0, "alm0_22")
         
 
@@ -606,50 +609,43 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
         #flm0_12 = process_xlm0(flm0_12, Raa, WF_a, cpp > 0, "flm0_12")
         #flm0_21 = process_xlm0(flm0_21, Raa, WF_a, cpp > 0, "flm0_21")
 
-        flm0_11 = qlms_dd_QE.get_sim_qlm('f' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_1) - mf0_p
-        flm0_11 = process_xlm0(flm0_11, Raa, WF_a, cpp > 0, "flm0_11")
+        flm0_11 = 0#qlms_dd_QE.get_sim_qlm('f' + k[1:], int(simidx), shift_1 = shift_1, shift_2 = shift_1) - mf0_p
+        flm0_11 = 0#process_xlm0(flm0_11, Raa, WF_a, cpp > 0, "flm0_11")
 
-    #Rpp_unl, Roo_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,
-    #                                      {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
-    Rpp_unl, Roo_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'p', cls_len, cls_len,
+
+    fel_unl, fbl_unl, ftl_unl = fel, fbl, ftl
+    cls_len_2 = cls_grad
+    cls_len_1 = cls_len
+    
+    #cls_len_1, cls_len_2 = cls_unl, cls_unl
+
+    Rpp_unl, Roo_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'p', cls_len_1, cls_len_2,
                                           {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
 
     if condition:
-        #Raa_unl = qresp.get_response('a' + k[1:], lmax_ivf, 'a', cls_unl, cls_unl,
-        #                                {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
-        
-        #Rff_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'f', cls_unl, cls_unl,
-        #                                {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
-
-        #Rpf_unl, Rof_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'f', cls_unl, cls_unl,
-        #                                    {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
-        
-        #Rpa_unl, Roa_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'a', cls_unl, cls_unl,
-        #                                    {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
-        
-        #Rap_unl, Rao_unl = qresp.get_response('a' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,
-        #                                {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
-
-        #Rfp_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'p', cls_unl, cls_unl,  
-        #                                {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
-
-        Raa_unl = qresp.get_response('a' + k[1:], lmax_ivf, 'a', cls_len, cls_len,
+        Raa_unl = qresp.get_response('a' + k[1:], lmax_ivf, 'a', cls_len_1, cls_len_2,
                                         {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
         
-        Rpa_unl, Roa_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'a', cls_len, cls_len,
+        """Rpa_unl, Roa_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'a', cls_len, cls_len_2,
                                             {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
         
-        Rap_unl, Rao_unl = qresp.get_response('a' + k[1:], lmax_ivf, 'p', cls_len, cls_len,
-                                        {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
+        Rap_unl, Rao_unl = qresp.get_response('a' + k[1:], lmax_ivf, 'p', cls_len, cls_len_2,
+                                        {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]"""
+        
+        _, _, RGCax, Rao_unl = qresp.get_response('a' + k[1:], lmax_ivf, 'x', cls_len_1, cls_len_2, {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl},
+                                    lmax_qlm=lmax_qlm) 
+        _, _, _, Roa_unl = qresp.get_response('x' + k[1:], lmax_ivf, 'a', cls_len_1, cls_len_2, {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl},
+                                        lmax_qlm=lmax_qlm)
 
-        Rff_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'f', cls_len, cls_len,
+        Rff_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'f', cls_len_1, cls_len_2,
                                         {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
-        Rpf_unl, Rof_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'f', cls_len, cls_len,
+        Rpf_unl, Rof_unl = qresp.get_response('p' + k[1:], lmax_ivf, 'f', cls_len_1, cls_len_2,
                                             {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0:2]
-        Rfp_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'p', cls_len, cls_len,  
+        Rfp_unl = qresp.get_response('f' + k[1:], lmax_ivf, 'p', cls_len_1, cls_len_2,  
                                         {'e': fel_unl, 'b': fbl_unl, 't': ftl_unl}, lmax_qlm=lmax_qlm)[0]
 
-        print("Rfp_unl", Rfp_unl.shape)
+        #np.savetxt("respsff.txt", np.c_[Rff_unl, Rpp_unl, Rpf_unl, Rfp_unl])
+        #print("Rfp_unl", Rfp_unl.shape)
     
     # Lensing deflection field instance (initiated here with zero deflection)
 
@@ -662,7 +658,11 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     if condition:
         signal_dictionary = {"pp": cpp, "oo": coo, "aa": caa, "pf": cpf*0, "ff": cff}
         #response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "fp": Rfp_unl, "pf": Rpf_unl, "ff": Rff_unl}
-        response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "fp": Rfp_unl, "pf": Rpf_unl, "ff": Rff_unl, "ao": Rao_unl, "oa": Roa_unl}
+        
+        #response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "fp": Rfp_unl, "pf": Rpf_unl, "ff": Rff_unl, "ao": Rao_unl, "oa": Roa_unl}
+        
+        response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "fp": Rfp_unl, "pf": Rpf_unl, "ff": Rff_unl}
+        #response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "ff": Rff_unl} #no crosses
     else:
         signal_dictionary = {"pp": cpp, "oo": coo}
         response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl}
@@ -713,7 +713,7 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     hh_h0 *= (chh > 0)
 
 
-    doshift = True
+    doshift = False
 
     if condition:
         starting_points_dictionary = {"p": plm0, "a": alm0, "o": olm0, "f": flm0}
@@ -773,59 +773,30 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
         datmaps = np.array([alm_copy(eblm[0], None, lmax_ivf, mmax_ivf), alm_copy(eblm[1], None, lmax_ivf, mmax_ivf) ])
         del eblm
         wflm0 = lambda: alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl)
-    elif k in ['p']:
-        filtr = alm_filter_nlev_wl_tp(nlev_t, nlev_p, ffi, transf_tlm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf),
-                                    transf_b=transf_blm, transf_e=transf_elm)
-        # dat maps must now be given in harmonic space in this idealized configuration
-        eblm = np.array(sims_MAP.get_sim_pmap(int(simidx)))
-        tlm = sims_MAP.get_sim_tmap(int(simidx))
-        datmaps = np.array([alm_copy(tlm, None, lmax_ivf, mmax_ivf),
-                            alm_copy(eblm[0], None, lmax_ivf, mmax_ivf),
-                            alm_copy(eblm[1], None, lmax_ivf, mmax_ivf)])
-        del tlm, eblm
-        wflm0 = lambda: np.array([alm_copy(ivfs_walpha.get_sim_tmliklm(simidx), None, lmax_unl, mmax_unl),
-                                  alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl)])
-
-    elif k in ['ptt']:
-        # Here multipole cuts are set by the transfer function (those with 0 are not considered)
-        filtr = alm_filter_nlev_wl_t(nlev_t, ffi, transf_tlm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf))
-        # dat maps must now be given in harmonic space in this idealized configuration
-        tlm = sims_MAP.get_sim_tmap(int(simidx))
-        datmaps = alm_copy(tlm, None, lmax_ivf, mmax_ivf)
-        del tlm
-        wflm0 = lambda: alm_copy(ivfs_walpha.get_sim_tmliklm(simidx), None, lmax_unl, mmax_unl)
-
     else:
         assert 0
 
-
     k_geom = filtr.ffi.geom if not joint_module else LensingOp.field.geom # Customizable Geometry for position-space operations in calculations of the iterated QEs etc
 
-
-    if 'wcurl' in version:
-        # Sets to zero all L-modes below Lmin in the iterations:
-        stepper = utils_steps.harmonicbump(xa=400, xb=1500)
-        iterator = iterator_cstmf_wcurl(libdir_iterator, 'p', [(lmax_qlm, mmax_qlm), (lmax_qlm, mmax_qlm)], datmaps,
-                                  [plm0, olm0], [mf0_p, mf0_o], [Rpp_unl, Roo_unl], [cpp, coo], ('p', 'x'), cls_unl, filtr, k_geom,
-                                  chain_descrs(lmax_unl, cg_tol), stepper,
-                                 wflm0=wflm0)
-
-    else: # standard gradient only
-        stepper = steps.harmonicbump(lmax_qlm, mmax_qlm, xa=400, xb=1500, a = 0.5, b = 0.1, scale = 50)  # reduce the gradient by 0.5 for large scale and by 0.1 for small scales to improve convergence in regimes where the deflection field is not invertible
-        step_val = 0.5
-        stepper = steps.nrstep(lmax_qlm, mmax_qlm, val = step_val)
+    stepper = steps.harmonicbump(lmax_qlm, mmax_qlm, xa=400, xb=1500, a = 0.5, b = 0.1, scale = 50)  # reduce the gradient by 0.5 for large scale and by 0.1 for small scales to improve convergence in regimes where the deflection field is not invertible
+    step_val = 0.5
+    stepper = steps.nrstep(lmax_qlm, mmax_qlm, val = step_val)
+    
+    if joint_module:
+        #stepper = steps.nrstep(lmax_qlm, mmax_qlm, val = step_val, vals = [step_val]*len(Operator.names))
+        stepper = steps.harmonicbump(lmax_qlm, mmax_qlm, xa=400, xb=1500, a = 0.5, b = 0.1, scale = 50)
         
-        if joint_module:
-            stepper = steps.nrstep(lmax_qlm, mmax_qlm, val = step_val, vals = [step_val]*len(Operator.names))
-            iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,
-                plm0, plm0 * 0, Rpp_unl, cpp, cls_unl, filtr, k_geom, chain_descrs(lmax_unl, cg_tol), stepper
-                , wflm0=lambda : alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl), 
-                pp_h0s_matrix = pp_h0s_matrix, inv_signal_matrix = inv_signal_matrix, plm0_12 = plm0_12, plm0_21 = plm0_21, sims_lib = sims_walpha,
-                idx = simidx, itmax = args.itmax)
-        else:
-            iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,
-                plm0, plm0 * 0, Rpp_unl, cpp, cls_unl, filtr, k_geom, chain_descrs(lmax_unl, cg_tol), stepper
-                , wflm0=lambda : alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl))
+        iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,
+            plm0, plm0 * 0, Rpp_unl, cpp, cls_unl, filtr, k_geom, chain_descrs(lmax_unl, cg_tol), stepper
+            , wflm0=lambda : alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl), 
+            pp_h0s_matrix = pp_h0s_matrix, inv_signal_matrix = inv_signal_matrix, sims_lib = sims_walpha)
+    else:
+        print("RUNNING STANDARD LENSING RECONSTRUCTION")
+        cls_unl_filt = cls_unl
+        cls_unl_filt = cls_len
+        iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,
+            plm0, plm0 * 0, Rpp_unl, cpp, cls_unl_filt, filtr, k_geom, chain_descrs(lmax_unl, cg_tol), stepper
+            , wflm0=lambda : alm_copy(ivfs_walpha.get_sim_emliklm(simidx), None, lmax_unl, mmax_unl))
     return iterator
 
 if __name__ == '__main__':
@@ -834,26 +805,71 @@ if __name__ == '__main__':
     soltn_cond = lambda it: True # Uses (or not) previous E-mode solution as input to search for current iteration one
 
 
-    maximum = args.itmax+2
+    #maximum = args.itmax+1 #NOTE!!!
 
-    mpi.barrier = lambda : 1 # redefining the barrier (Why ? )
+    maximum = args.itmax+40
+
+    #mpi.barrier = lambda : 1 # redefining the barrier (Why ? )
     from delensalot.core.iterator.statics import rec as Rec
-    jobs = []
+
+    base_jobs = [] #NUMBER OF SIMULATIONS I NEED TO CALCULATE
     for idx in np.arange(args.imin, args.imax + 1):
         lib_dir_iterator = libdir_iterators(args.k, idx, args.v)
         if Rec.maxiterdone(lib_dir_iterator) < maximum or args.plot:
-            jobs.append(idx)
+            base_jobs.append(idx)
 
     if mpi.rank ==0:
         print("Caching things in " + TEMP)
 
+    if args.do_mf:
+        Nmf = 2
+        mf_indices = np.arange(1000, 1000 + Nmf, 1)
+        expanded_jobs = []
+        for sim_idx in base_jobs:
+            # Add mean field jobs for this simulation
+            for mf_idx in mf_indices:
+                expanded_jobs.append((sim_idx, mf_idx)) #NOW, I KNOW EACH PROCESS NEEDS TO DO SOME WORK
+    else:
+        expanded_jobs = [(idx, None) for idx in base_jobs]
 
-    for idx in jobs[mpi.rank::mpi.size]:
+    #my_jobs = expanded_jobs[mpi.rank::mpi.size]
+    my_jobs = base_jobs[mpi.rank::mpi.size]
+
+    """sim_to_rank = {}
+    for r in range(mpi.size):
+        rank_jobs = expanded_jobs[r::mpi.size]
+        for job_index, (sim_idx, mf_idx) in enumerate(rank_jobs):
+            if sim_idx not in sim_to_rank:
+                sim_to_rank[sim_idx] = r"""
+
+    """# Group jobs by simulation index
+    sim_groups = {}
+    for job_index, (sim_idx, mf_idx) in enumerate(my_jobs):
+        if sim_idx not in sim_groups:
+            sim_groups[sim_idx] = []
+        sim_groups[sim_idx].append(mf_idx)"""
+
+    print(my_jobs)
+
+    #for idx in jobs[mpi.rank::mpi.size]:
+    #for idx, mf_indices in sim_groups.items():
+    for idx in my_jobs:
+        
+        
         lib_dir_iterator = libdir_iterators(args.k, idx, args.v)
         print("iterator folder: " + lib_dir_iterator)
 
         if (args.itmax >= 0) and (Rec.maxiterdone(lib_dir_iterator) < maximum):
-            itlib = get_itlib(args.k, idx, args.v, 1.)
+
+            #if (Rec.maxiterdone(lib_dir_iterator) in [0, 1]) and args.do_mf and (mpi.rank == sim_to_rank[idx]):
+            #if args.do_mf and (mpi.rank == sim_to_rank[idx]):
+            #    itlib = get_itlib(args.k, idx, args.v, 1., sim_to_rank[idx])
+            itlib = get_itlib(args.k, idx, args.v, 1., idx)
+
+            #mpi.barrier()
+
+            #itlib = get_itlib(args.k, idx, args.v, 1., sim_to_rank[idx])
+            
             for i in range(args.itmax + 1):
                 print("****Iterator: setting cg-tol to %.4e ****"%tol_iter(i))
                 print("****Iterator: setting solcond to %s ****"%soltn_cond(i))
@@ -861,30 +877,44 @@ if __name__ == '__main__':
                 itlib.soltn_cond   = soltn_cond(i)
                 print("doing iter " + str(i))
 
-                if args.do_mf and (i > 0):
-                    print("****Starting with mean field****")
 
-                    base = 2000
-                    Nmf = 15
-                    key = "p"
+                if Rec.is_iter_done(lib_dir_iterator, i-1):
+                    if (args.do_mf) and (i <= args.itmax) and (i > 0):
+                        print("Previous iteration is done. Can calculate MF.")
+                        mpi.barrier()
+                        print("****Starting with mean field****")
+                        print(f"Computing mean field {mf_idx} for sim {idx}")
+                        for mf_idx in mf_indices:
+                            if mf_idx is not None:
+                                grads_mf.get_graddet_sim_mf_trick(itlib, i, [mf_idx], 
+                                    "p", libPHASCMB_mf, zerolensing=False, recache=False)
                     
-                    #give this to other ranks
-                    simidxs = np.arange(idx+base, idx+base+Nmf)
-                    grads_mf.get_graddet_sim_mf_trick(itlib, i, simidxs, 
-                                key, libPHASCMB_mf, zerolensing = False, recache = False)
+                mpi.barrier()
 
-                #give this to rank 0 of inner loop
-                itlib.iterate(i, 'p')
-                print("done iter " + str(i))
+                #all_done = 1  # Mark as done
+                #total_done = mpi.reduce(all_done, op=mpi.sum, root=sim_to_rank[idx])
 
-                if i == args.itmax:
-                    print("**Get N0 sims**")
-                    N0s = 10
-                    key = "p"
-                    for j in range(N0s):
-                        grads_mf.calc_sims_v2(itlib, idx+j, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key, idx)
-                    
-                #wait rank0 to finish
-                #if mpi.rank == 0:
-                #    itlib.iterate(i, 'p')
-                #mpi.barrier()
+                #if mpi.rank == sim_to_rank[idx]:
+                if True:
+                    print("Main iteration for rank, simulation", mpi.rank, idx)
+                    #give this to rank 0 of inner loop
+                    itlib.iterate(i, 'p')
+                    print("done iter " + str(i))
+
+                    if (i == args.itmax) and args.getrdn0:
+                        print("**Get N0 sims**")
+                        #N0s = 32
+                        #N0s = 30
+                        N0s = 30
+                        key = "p"
+                        which = "a"
+
+                        simset = np.arange(N0s)
+
+                        grads_mf.calc_sims_v3(itlib, simset, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key, idx, lib_dir_iterator, which = which)
+
+                        #grads_mf.calc_sims_v3(itlib, simset, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key, idx, lib_dir_iterator, which = "p")
+                        for j in range(N0s):
+                            grads_mf.calc_sims_v2(itlib, j, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key, idx, lib_dir_iterator, which = which)
+
+                mpi.barrier()

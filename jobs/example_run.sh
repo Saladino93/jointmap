@@ -1,11 +1,11 @@
 #!/bin/sh -l
-#SBATCH --job-name=official_a_disabled
-#SBATCH --time=02:00:00
+#SBATCH --job-name=analyse
+#SBATCH --time=00:40:00
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=24
 #SBATCH --constraint=gpu
-#SBATCH --nodes=64
-#SBATCH --output=/scratch/snx3000/odarwish/slurms/lenscarf-slurm-%J.out
+#SBATCH --nodes=16
+#SBATCH --output=/scratch/snx3000/odarwish/slurms/analyse-%J.out
 #SBATCH --account=lp44
 #SBATCH --partition=normal
 
@@ -17,5 +17,4 @@ export OMP_NUM_THREADS=24
 export OMP_PLACES=threads
 export OMP_PROC_BIND=false
 
-
-srun python ../scripts/param_joint.py -c ../scripts/configs/official_check_factor_2.yaml
+srun python ../scripts/param_joint.py -c ../scripts/configs/official_multiple_len_resp.yaml

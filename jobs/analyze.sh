@@ -17,11 +17,4 @@ export OMP_NUM_THREADS=24
 export OMP_PLACES=threads
 export OMP_PROC_BIND=false
 
-
-srun python ../scripts/analyse_parallel.py --qe_key p_p --cmbversion phi_alpha --version phi_omega_alpha_joint_randomized --imin 0 --imax 63 --itmax 10 --lmax_qlm 5120 --selected a p o
-srun python ../scripts/analyse_parallel.py --qe_key p_p --cmbversion phi_alpha --version phi_omega_joint_randomized --imin 0 --imax 63 --itmax 10 --lmax_qlm 5120 --selected p o
-
-
-#srun python ../scripts/analyse_parallel.py --qe_key p_p --cmbversion phi_alpha --version phi_omega_alpha_joint --imin 0 --imax 63 --itmax 12 --lmax_qlm 5120 --selected a p o
-#srun python ../scripts/analyse_parallel.py --qe_key p_p --cmbversion phi_alpha --version phi_omega_joint --imin 0 --imax 63 --itmax 15 --lmax_qlm 5120 --selected p o
-#srun python ../scripts/analyse_parallel.py --qe_key p_p --cmbversion alpha --version alpha_joint --imin 0 --imax 31 --itmax 15 --lmax_qlm 5120 --selected a
+srun ~/.conda/envs/lenscarf/bin/python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_spt3g.yaml

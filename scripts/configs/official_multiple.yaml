@@ -1,6 +1,7 @@
 #This file has full set of effects in the observed CMB
 #but it only reconstructs the rotation and lensing effects.
 #the rotation effect is disabled as an operator
+name: s4multiple
 title: '$[\widehat{\alpha}\widehat{\phi}]^{D}[\alpha, \phi]$'
 k: "p_p"
 itmax: 15

@@ -7,7 +7,9 @@ To run your reconstructions, go in the `scripts` directory and follow the `READM
 To use the code, you need:
 
 https://github.com/mreineck/ducc
+
 https://github.com/carronj/plancklens
+
 https://github.com/carronj/lenspyx
 
 https://github.com/Saladino93/delensalotlight (this is a simplified fork of https://github.com/NextGenCMB/delensalot)

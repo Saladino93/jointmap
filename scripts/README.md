@@ -9,5 +9,7 @@ There is also QE bias-hardening in a different parameter file
 ## Making plots
 
 `python plot_noise.py --config spt3g`
+
 `python plot_wiener.py --config spt3g`
+
 `python plot_xcorr.py --config spt3g`

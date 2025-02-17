@@ -17,4 +17,4 @@ export OMP_NUM_THREADS=24
 export OMP_PLACES=threads
 export OMP_PROC_BIND=false
 
-srun python ../scripts/param_joint.py -c ../scripts/configs/official_multiple_len_resp.yaml
+srun python ../scripts/param_joint.py -c ../scripts/configs/spt3g.yaml

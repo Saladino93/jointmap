@@ -1,6 +1,6 @@
 # Description
 
-Note, setup some `SCRATCH` folder through some environment variable.
+Setup some `SCRATCH` folder through some environment variable.
 
 You need to edit the files below to match your settings in a computer cluster or local run.
 

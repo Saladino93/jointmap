@@ -1,19 +1,22 @@
 #This file has full set of effects in the observed CMB
 #but it only reconstructs the rotation and lensing effects.
 #the rotation effect is disabled as an operator
+name: spt
 title: '$[\widehat{\alpha}\widehat{\phi}]^{D}[\alpha, \phi]$'
 k: "p_p"
-itmax: 20
+itmax: 15
 imin: 0
-imax: 127
-v: "apo_new_official_a_disabled" #should have been disabled :p
+imax: 63
+v: "apospt3g"
 joint_module: true
+do_mf: false
+getrdn0: false
 cmb_version: "apo_new"
-selected: ["ad", "p", "o"] #ad would give a but disabled.
+selected: ["a", "p", "o"] #ad would give a but disabled.
 cmbchain: ["a", "p"]
 tol: 6
-beam: 1.0
-nlev_t: 1.0
+beam: 1.4
+nlev_t: 1.6
 lmax_ivf: 4000
 mmax_ivf: 4000
 lmin_elm: 30

@@ -17,4 +17,4 @@ export OMP_NUM_THREADS=24
 export OMP_PLACES=threads
 export OMP_PROC_BIND=false
 
-srun ~/.conda/envs/lenscarf/bin/python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/official_spt3g.yaml
+srun ~/.conda/envs/lenscarf/bin/python ../scripts/complete-analysis-parallel.py -c ../scripts/configs/spt3g.yaml

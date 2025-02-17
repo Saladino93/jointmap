@@ -36,10 +36,18 @@ cls_grad = camb_clfile_gradient(opj(cls_path, 'lensedCMB_dmn1_lensedgradCls.dat'
 cls_rot = np.loadtxt(opj(cls_path, 'new_lensedCMB_dmn1_field_rotation_power.dat')).T[1]
 
 
-caso = "" #cmb-s4
-caso = "_so"
+caso_s4 = "" #cmb-s4
+caso_so = "_so"
+caso_spt = "_spt"
 
-SO_case = (caso == "_so")
+caso = caso_spt
+
+SO_name = "so"
+SPT_name = "spt"
+S4_name = ""
+names = {caso_s4:S4_name, caso_so:SO_name, caso_spt:SPT_name}
+
+name = names[caso]
 
 ns = 1
 ACB = 7
@@ -47,17 +55,19 @@ ell = np.arange(0, len(cls_unl["tt"])+1)
 cls_alpha = 10**(-ACB)*2*np.pi/(ell*(ell+1))**ns
 cls_alpha[0] = 0
 
-cls_unl["aa"] = cls_alpha
+#cls_unl["aa"] = cls_alpha
 
+nlev_tdict = {caso_s4: 1., caso_so: 6., caso_spt: 1.6}
+beam_fwhm_dict = {caso_s4: 1., caso_so: 1.4, caso_spt: 1.4}
 
-nlev_t = 1. if not SO_case else 6.
+nlev_t = nlev_tdict[caso]
 nlev_p = nlev_t*np.sqrt(2)
-beam_fwhm = 1. if SO_case else 1.4
+beam_fwhm = beam_fwhm_dict[caso]
 cls_unl_fid = cls_unl
 lmin_cmb = 30
 lmin_blm, lmin_elm, lmin_tlm = lmin_cmb, lmin_cmb, lmin_cmb
 lmax_cmb = 4000
-itermax = 1
+itermax = 10
 ret_curl = True
 
 lmax_qlm = 5120
@@ -82,6 +92,44 @@ for i, a in enumerate(['t', 'e', 'b']):
             cls_ivfs[a + b] = cls_ivfs_arr[i, j + i]
 
 
+########
+
+dir = f"{name}data/"
+print("Directory", dir)
+
+if mpi.rank == 0:
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+
+if False:
+    from delensalot.biases import iterbiasesN0N1
+
+    qe_key = 'p_p'
+
+    cachedir = f"n0n1_cachedir_{name}_stuff_new"
+    itbias = iterbiasesN0N1.iterbiases(nlev_t, nlev_p, beam_fwhm, (lmin_cmb, lmin_cmb, lmin_cmb), lmax_cmb,
+                                        lmax_qlm, cls_unl_fid, None, cachedir, verbose=True)
+    N0s_iter = {}
+    N1s_iter = {}
+    rggs_iter = {}
+
+    for itermax in [0, 1, 10]:
+        Ns, fid_delcls, dat_cls = itbias.get_n0n1(qe_key, itermax, None, None, version = "wN1")
+        print("Save info")
+        np.save(f"{dir}fid_delcls_{itermax}.npy", fid_delcls)
+        N0s, N1s, rgg, _ = Ns
+        N0s_iter[itermax] = N0s
+        N1s_iter[itermax] = N1s
+        rggs_iter[itermax] = rgg
+        if mpi.rank == 0:
+            np.savetxt(f"{dir}/N0s_{itermax}.txt", N0s)
+            np.savetxt(f"{dir}/N1s_{itermax}.txt", N1s)
+
+########
+
+
+
+
 nggs = {}
 r_ggs = {}
 for source in ["p", "a"]:
@@ -99,26 +147,27 @@ for source in ["p", "a"]:
 
 
 out_dir = f"noise_biases{caso}/"
-
-np.savetxt(out_dir+"ngg_a_QE.txt", nggs["a"])
-
-lib_dir = f'./n1s_aa{caso}'
-n1lib = n1.library_n1(lib_dir, cls_len['tt'], cls_len['te'], cls_len['ee'], lmaxphi=2500, dL=10, lps=None)
-n1_aa = n1lib.get_n1('a_p', 'a', cls_unl['aa'], ftl, fel, fbl, lmax_qlm)*utils.cli(r_ggs["a"] ** 2)#note, should be 'aa' not 'pp'!!
-n1_ap = n1lib.get_n1('a_p', 'p', cls_unl['pp'], ftl, fel, fbl, lmax_qlm)*utils.cli(r_ggs["a"] ** 2)
-
 if mpi.rank == 0:
-    np.savetxt(out_dir+"n1_aa_QE.txt", n1_aa)
-    np.savetxt(out_dir+"n1_ap_QE.txt", n1_ap)
+    if not os.path.exists(out_dir):
+        os.mkdir(out_dir)
+    np.savetxt(out_dir+"ngg_a_QE.txt", nggs["a"])
+
+if True:
+    lib_dir = f'./n1s_aa{caso}'
+    n1lib = n1.library_n1(lib_dir, cls_len['tt'], cls_len['te'], cls_len['ee'], lmaxphi=4000, dL=10, lps=None)
+    n1_ap = n1lib.get_n1('a_p', 'p', cls_unl['pp'], ftl, fel, fbl, lmax_qlm)*utils.cli(r_ggs["a"] ** 2)
+    if mpi.rank == 0:
+        np.savetxt(out_dir+"n1_ap_QE.txt", n1_ap)
+    #n1_aa = n1lib.get_n1('a_p', 'a', cls_unl['aa'], ftl, fel, fbl, lmax_qlm)*utils.cli(r_ggs["a"] ** 2)#note, should be 'aa' not 'pp'!!
+    #if mpi.rank == 0:
+    #    np.savetxt(out_dir+"n1_aa_QE.txt", n1_aa)
 
 
 #### TAKE CARE OF ITERATED QUANTITIES
 
 qe_key = "a_p"
 
-dir = "sodata/" if SO_case else ""
-
-it = 10
+it = 1
 fal, dat_delcls, cls_w, cls_f = np.load(f"{dir}fal_{it}.npy", allow_pickle=True).take(0), np.load(f"{dir}dat_delcls_{it}.npy", allow_pickle=True).take(0), np.load(f"{dir}cls_w_{it}.npy", allow_pickle=True).take(0), np.load(f"{dir}cls_f_{it}.npy", allow_pickle=True).take(0)
 cls_ivfs_arr = utils.cls_dot([fal, dat_delcls, fal])
 cls_ivfs = dict()
@@ -130,23 +179,25 @@ n_gg = nhl.get_nhl(qe_key, qe_key, cls_w, cls_ivfs, lmax_cmb, lmax_cmb, lmax_out
 r_gg_true = qresp.get_response(qe_key, lmax_cmb, source, cls_w, cls_f, fal, lmax_qlm=lmax_qlm)[0]
 N0_unbiased = n_gg * utils.cli(r_gg_true ** 2)  # N0 of QE estimator after rescaling by Rfid / Rtrue to make it unbiased
 if mpi.rank == 0:
-    np.savetxt(out_dir+"ngg_a_itr_10.txt", N0_unbiased)
+    np.savetxt(out_dir+f"ngg_a_itr_{it}.txt", N0_unbiased)
 
-print("Read", f"{dir}fid_delcls_10.npy")
-fid_delcls_10 = np.load(f"{dir}fid_delcls_10.npy", allow_pickle=True)
+print("Read", f"{dir}fid_delcls_{it}.npy")
+fid_delcls_10 = np.load(f"{dir}fid_delcls_{it}.npy", allow_pickle=True)
 
-lib_dir = f'./n1s_aa_itr_10{caso}_check'
-n1lib = n1.library_n1(lib_dir, cls_w['tt'], cls_w['te'], cls_w['ee'], lmaxphi=2500, dL=10, lps=None)
+lib_dir = f'./n1s_aa_itr_{it}{caso}_check_new'
+n1lib = n1.library_n1(lib_dir, cls_w['tt'], cls_w['te'], cls_w['ee'], lmaxphi=4000, dL=10, lps=None)
 n1_ap = n1lib.get_n1('a_p', 'p', fid_delcls_10[-1]['pp'], fal["ee"], fal["ee"], fal["bb"], lmax_qlm)*utils.cli(r_gg_true ** 2)
 if mpi.rank == 0:
-    np.savetxt(out_dir+"n1_ap_itr_10_other.txt", n1_ap)
-cls_alpha_residual = np.loadtxt("cls_alpha_residual.txt")
+    np.savetxt(out_dir+f"n1_ap_itr_{it}.txt", n1_ap)
+
 n1_aa = n1lib.get_n1('a_p', 'a', cls_unl['aa'], fal["ee"], fal["ee"], fal["bb"], lmax_qlm)*utils.cli(r_gg_true ** 2)
 if mpi.rank == 0:
-    np.savetxt(out_dir+"n1_aa_itr_10.txt", n1_aa)
-n1_aa_residual = n1lib.get_n1('a_p', 'a', cls_alpha_residual, fal["ee"], fal["ee"], fal["bb"], lmax_qlm)*utils.cli(r_gg_true ** 2)
-if mpi.rank == 0:
-    np.savetxt(out_dir+"n1_aa_residual_itr_10.txt", n1_aa_residual)
+    np.savetxt(out_dir+f"n1_aa_itr_{it}.txt", n1_aa)
+
+#cls_alpha_residual = np.loadtxt("cls_alpha_residual.txt")
+#n1_aa_residual = n1lib.get_n1('a_p', 'a', cls_alpha_residual, fal["ee"], fal["ee"], fal["bb"], lmax_qlm)*utils.cli(r_gg_true ** 2)
+#if mpi.rank == 0:
+#    np.savetxt(out_dir+"n1_aa_residual_itr_10.txt", n1_aa_residual)
 
 
 ## Now, take care of input lensed

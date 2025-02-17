@@ -833,8 +833,8 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float, sim_rank):
         stepper = steps.nrstep(lmax_qlm, mmax_qlm, val = step_val)
         
         if joint_module:
-            stepper = steps.nrstep(lmax_qlm, mmax_qlm, val = step_val, vals = [step_val]*len(Operator.names))
-            #stepper = steps.harmonicbump(lmax_qlm, mmax_qlm, xa=400, xb=1500, a = 0.5, b = 0.1, scale = 50)
+            #stepper = steps.nrstep(lmax_qlm, mmax_qlm, val = step_val, vals = [step_val]*len(Operator.names))
+            stepper = steps.harmonicbump(lmax_qlm, mmax_qlm, xa=400, xb=1500, a = 0.5, b = 0.1, scale = 50)
             
             iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,
                 plm0, plm0 * 0, Rpp_unl, cpp, cls_unl, filtr, k_geom, chain_descrs(lmax_unl, cg_tol), stepper
@@ -873,35 +873,39 @@ if __name__ == '__main__':
         print("Caching things in " + TEMP)
 
     if args.do_mf:
-        Nmf = 10
+        Nmf = 2
+        mf_indices = np.arange(1000, 1000 + Nmf, 1)
         expanded_jobs = []
         for sim_idx in base_jobs:
             # Add mean field jobs for this simulation
-            for mf_idx in range(1000, 1000 + Nmf):
+            for mf_idx in mf_indices:
                 expanded_jobs.append((sim_idx, mf_idx)) #NOW, I KNOW EACH PROCESS NEEDS TO DO SOME WORK
     else:
         expanded_jobs = [(idx, None) for idx in base_jobs]
 
-    my_jobs = expanded_jobs[mpi.rank::mpi.size]
+    #my_jobs = expanded_jobs[mpi.rank::mpi.size]
+    my_jobs = base_jobs[mpi.rank::mpi.size]
 
-    sim_to_rank = {}
+    """sim_to_rank = {}
     for r in range(mpi.size):
         rank_jobs = expanded_jobs[r::mpi.size]
         for job_index, (sim_idx, mf_idx) in enumerate(rank_jobs):
             if sim_idx not in sim_to_rank:
-                sim_to_rank[sim_idx] = r
+                sim_to_rank[sim_idx] = r"""
 
-    # Group jobs by simulation index
+    """# Group jobs by simulation index
     sim_groups = {}
     for job_index, (sim_idx, mf_idx) in enumerate(my_jobs):
         if sim_idx not in sim_groups:
             sim_groups[sim_idx] = []
-        sim_groups[sim_idx].append(mf_idx)
+        sim_groups[sim_idx].append(mf_idx)"""
 
     print(my_jobs)
 
     #for idx in jobs[mpi.rank::mpi.size]:
-    for idx, mf_indices in sim_groups.items():
+    #for idx, mf_indices in sim_groups.items():
+    for idx in my_jobs:
+        
         
         lib_dir_iterator = libdir_iterators(args.k, idx, args.v)
         print("iterator folder: " + lib_dir_iterator)
@@ -909,12 +913,13 @@ if __name__ == '__main__':
         if (args.itmax >= 0) and (Rec.maxiterdone(lib_dir_iterator) < maximum):
 
             #if (Rec.maxiterdone(lib_dir_iterator) in [0, 1]) and args.do_mf and (mpi.rank == sim_to_rank[idx]):
-            if args.do_mf and (mpi.rank == sim_to_rank[idx]):
-                itlib = get_itlib(args.k, idx, args.v, 1., sim_to_rank[idx])
+            #if args.do_mf and (mpi.rank == sim_to_rank[idx]):
+            #    itlib = get_itlib(args.k, idx, args.v, 1., sim_to_rank[idx])
+            itlib = get_itlib(args.k, idx, args.v, 1., idx)
 
-            mpi.barrier()
+            #mpi.barrier()
 
-            itlib = get_itlib(args.k, idx, args.v, 1., sim_to_rank[idx])
+            #itlib = get_itlib(args.k, idx, args.v, 1., sim_to_rank[idx])
             
             for i in range(args.itmax + 1):
                 print("****Iterator: setting cg-tol to %.4e ****"%tol_iter(i))
@@ -924,21 +929,24 @@ if __name__ == '__main__':
                 print("doing iter " + str(i))
 
 
-                if (args.do_mf) and (i <= args.itmax) and (i > 0):
-                    mpi.barrier()
-                    print("****Starting with mean field****")
-                    print(f"Computing mean field {mf_idx} for sim {idx}")
-                    for mf_idx in mf_indices:
-                        if mf_idx is not None:
-                            grads_mf.get_graddet_sim_mf_trick(itlib, i, [mf_idx], 
-                                "p", libPHASCMB_mf, zerolensing=False, recache=False)
+                if Rec.is_iter_done(lib_dir_iterator, i-1):
+                    print("Previous iteration is done. Can calculate MF.")
+                    if (args.do_mf) and (i <= args.itmax) and (i > 0):
+                        mpi.barrier()
+                        print("****Starting with mean field****")
+                        print(f"Computing mean field {mf_idx} for sim {idx}")
+                        for mf_idx in mf_indices:
+                            if mf_idx is not None:
+                                grads_mf.get_graddet_sim_mf_trick(itlib, i, [mf_idx], 
+                                    "p", libPHASCMB_mf, zerolensing=False, recache=False)
                     
                 mpi.barrier()
 
                 #all_done = 1  # Mark as done
                 #total_done = mpi.reduce(all_done, op=mpi.sum, root=sim_to_rank[idx])
 
-                if mpi.rank == sim_to_rank[idx]:
+                #if mpi.rank == sim_to_rank[idx]:
+                if True:
                     print("Main iteration for rank, simulation", mpi.rank, idx)
                     #give this to rank 0 of inner loop
                     itlib.iterate(i, 'p')
@@ -953,6 +961,9 @@ if __name__ == '__main__':
                         which = "a"
 
                         simset = np.arange(N0s)
+
+                        grads_mf.calc_sims_v3(itlib, simset, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key, idx, lib_dir_iterator, which = which)
+
                         #grads_mf.calc_sims_v3(itlib, simset, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key, idx, lib_dir_iterator, which = "p")
                         for j in range(N0s):
                             grads_mf.calc_sims_v2(itlib, j, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key, idx, lib_dir_iterator, which = which)

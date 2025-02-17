@@ -270,6 +270,8 @@ class sims_cmb_len(object):
     def get_sim_alpha_lm(self, idx):
         index = self.offset_index(idx, self.offset_plm[0], self.offset_plm[1])
         pfname = os.path.join(self.lib_dir, 'sim_%04d_alpha_lm.fits' % index)
+        if os.path.exists(pfname):
+            return hp.read_alm(pfname)
         try:
             return hp.read_alm(pfname)
         except:

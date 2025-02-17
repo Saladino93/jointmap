@@ -5,7 +5,7 @@ title: '$[\widehat{\alpha}\widehat{\phi}]^{D}[\alpha, \phi]$'
 k: "p_p"
 itmax: 15
 imin: 0
-imax: 15
+imax: 9
 v: "afpo_04_02_v2"
 joint_module: true
 do_mf: true

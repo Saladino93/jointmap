@@ -501,6 +501,9 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     alm0 = qlms_dd_QE.get_sim_qlm(qe_key_a, int(simidx))  # Unormalized quadratic estimate:
     flm0 = qlms_dd_QE.get_sim_qlm(qe_key_f, int(simidx))  # Unormalized quadratic estimate:
     #"""
+    shift_1 = 1000
+    plm0_11 = qlms_dd_QE.get_sim_qlm(qe_key_p_f, int(simidx), shift_1 = shift_1, shift_2 = shift_1)
+    flm0_11 = qlms_dd_QE.get_sim_qlm(qe_key_f, int(simidx), shift_1 = shift_1, shift_2 = shift_1)
 
     # Isotropic normalization of the QE
 
@@ -566,6 +569,8 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
     process_xlm0(alm0, Raa, WF_a, caa, "alm0")
     process_xlm0(flm0, Rff, WF_f, cff, "flm0")
 
+    process_xlm0(plm0_11, Rpp, WF_p, cpp, "plm0_11")
+    process_xlm0(flm0_11, Rff, WF_f, cff, "flm0_11")
 
     """olm0 = alm_copy(olm0, None, lmax_qlm, mmax_qlm)  # Just in case the QE and MAP mmax'es were not consistent
     almxfl(olm0, utils.cli(Roo), mmax_qlm, True)  # Normalized QE

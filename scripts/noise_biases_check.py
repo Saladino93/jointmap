@@ -71,11 +71,12 @@ transf = hp.gauss_beam(beam_fwhm / 180 / 60 * np.pi, lmax=lmax_cmb)
 qe_key = "a_p"
 source = "a"
 
-qe_key = "p_p"
-source = "p"
+#qe_key = "p_p"
+#source = "p"
 source_n1 = "p"
 
 out_dir = os.path.join(os.environ['HOME'], 'jointmap', 'scripts', f"noise_biases{caso}/")
+out_dir = os.path.join(os.environ['HOME'], 'jointmap', 'scripts', f"noise_biases{caso}_check/")
 
 dir = opj(os.environ['HOME'], 'jointmap', 'scripts', "sodata/") if SO_case else opj(os.environ['HOME'], 'jointmap', 'scripts', "s4data/")
 
@@ -94,11 +95,11 @@ N0_unbiased = n_gg * utils.cli(r_gg_true ** 2)  # N0 of QE estimator after resca
 print("Read", f"{dir}fid_delcls_10.npy")
 fid_delcls_10 = np.load(f"{dir}fid_delcls_10.npy", allow_pickle=True)
 
-lib_dir = os.path.join(os.environ['HOME'], 'jointmap', 'scripts', f'./n1s_pp_itr_10{caso}_check')
-n1lib = n1.library_n1(lib_dir, cls_w['tt'], cls_w['te'], cls_w['ee'], lmaxphi=2500, dL=10, lps=None)
-n1_ap = n1lib.get_n1(qe_key, source_n1, fid_delcls_10[-1]['pp'], fal["ee"], fal["ee"], fal["bb"], 500)*utils.cli(r_gg_true ** 2)[:501]
+lib_dir = os.path.join(os.environ['HOME'], 'jointmap', 'scripts', f'./n1s_ap_itr_10{caso}_check3')
+n1lib = n1.library_n1(lib_dir, cls_w['tt'], cls_w['te'], cls_w['ee'], lmaxphi=6000, dL=10, lps=None)
+n1_ap = n1lib.get_n1(qe_key, source_n1, fid_delcls_10[-1]['pp'], fal["ee"], fal["ee"], fal["bb"], 2000)*utils.cli(r_gg_true ** 2)[:2001]
 if mpi.rank == 0:
-    np.savetxt(out_dir+"n1_pp_itr_10_other.txt", n1_ap)
+    np.savetxt(out_dir+"n1_ap_itr_10_other_2.txt", n1_ap)
 
     
 """cls_alpha_residual = np.loadtxt("cls_alpha_residual.txt")

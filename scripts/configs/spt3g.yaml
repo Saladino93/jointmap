@@ -6,7 +6,7 @@ title: '$[\widehat{\alpha}\widehat{\phi}]^{D}[\alpha, \phi]$'
 k: "p_p"
 itmax: 15
 imin: 0
-imax: 63
+imax: 1
 v: "apospt3g"
 joint_module: true
 do_mf: false
@@ -25,8 +25,8 @@ lmax_unl: 4000
 mmax_unl: 4000
 lmax_qlm: 5000
 mmax_qlm: 5000
-no_tau: true
-no_curl: true
+#no_tau: true
+#no_curl: true
 # Binning parameters
 binning:
   lmin: 20

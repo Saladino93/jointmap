@@ -1,6 +1,6 @@
 ## Running code
 
-`python param_joint.py -c spt3g.yaml`
+`python param_joint.py -c configs/spt3g.yaml`
 
 There is also QE bias-hardening in a different parameter file
 

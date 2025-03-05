@@ -6,16 +6,15 @@ k: "p_p"
 itmax: 15
 imin: 0
 imax: 31
-v: "apospt3g_a_disabled_po_only"
+v: "apo_new_official_check_factor_2_low_noise_case" #should have been disabled :p
 joint_module: true
-do_mf: false
-getrdn0: true
-cmb_version: "po_new"
-selected: ["ad", "p", "o"] #, "o"] #ad would give a but disabled.
-cmbchain: ["p"]
+do_mf: true
+cmb_version: "apo_new"
+selected: ["a", "p", "o"] #ad would give a but disabled.
+cmbchain: ["a", "p"]
 tol: 6
-beam: 1.4
-nlev_t: 1.6
+beam: 0.9
+nlev_t: 0.2
 lmax_ivf: 4000
 mmax_ivf: 4000
 lmin_elm: 30

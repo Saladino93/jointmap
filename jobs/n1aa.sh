@@ -19,4 +19,5 @@ export SCRATCH=/home/users/d/darwish/scratch
 #srun ~/.conda/envs/lenscarf/bin/python ../scripts/derotation_n1.py
 #srun ~/.conda/envs/lenscarf/bin/python ../scripts/noise_biases_check.py
 #srun ~/.conda/envs/lenscarf/bin/python ../scripts/noise_biases.py
-srun ~/.conda/envs/lenscarf/bin/python ../scripts/quickn1.py
+#srun ~/.conda/envs/lenscarf/bin/python ../scripts/quickn1.py
+srun ~/.conda/envs/lenscarf/bin/python ../scripts/n1s.py

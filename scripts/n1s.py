@@ -22,12 +22,18 @@ def camb_clfile_gradient(fname, lmax=None):
         cls[k][ell[idc]] = cols[i + 1][idc] / w[idc]
     return cls
 
-cls_path = opj(os.environ['HOME'], 'fgcmblensing', 'input', 'giulio')
+
+
+cls_path = opj(os.environ['HOME'], 'jointmap', 'data')
 #cls_path = opj("/Users/omard/Downloads/", 'giulio')
 cls_unl = utils.camb_clfile(opj(cls_path, 'lensedCMB_dmn1_lenspotentialCls.dat'))
 cls_len = utils.camb_clfile(opj(cls_path, 'lensedCMB_dmn1_lensedCls.dat'))
 cls_grad = camb_clfile_gradient(opj(cls_path, 'lensedCMB_dmn1_lensedgradCls.dat'))
 cls_rot = np.loadtxt(opj(cls_path, 'new_lensedCMB_dmn1_field_rotation_power.dat')).T[1]
+ls = np.arange(cls_rot.size)
+from plancklens.utils import cli
+factor = cli(ls*(ls+1)/2)
+cls_unl["oo"] = cls_rot*factor**2.
 
 
 ns = 1
@@ -70,8 +76,64 @@ cls_ivfs_arr = utils.cls_dot([fals, dat_cls, fals])
 
 from plancklens.n1 import n1
 
-lib_dir = './n1s_ranks'
-n1lib = n1.library_n1(lib_dir, cls_len['tt'], cls_len['te'], cls_len['ee'], lmaxphi=2500, dL=10, lps=None)
+lib_dir = './n1s_ranks_v2'
+n1lib = n1.library_n1(lib_dir, cls_len['tt'], cls_len['te'], cls_len['ee'], lmaxphi=4500, dL=10, lps=None)
 #n1_aa = n1lib.get_n1('a_p', 'a', cls_alpha, ftl, fel, fbl, lmax_qlm)
-n1_ap = n1lib.get_n1('a_p', 'p', cls_unl['pp'], ftl, fel, fbl, lmax_qlm)
-n1_pa = n1lib.get_n1('p_p', 'a', cls_alpha, ftl, fel, fbl, lmax_qlm)
+#n1_ap = n1lib.get_n1('a_p', 'p', cls_unl['pp'], ftl, fel, fbl, lmax_qlm)
+#n1_pa = n1lib.get_n1('p_p', 'a', cls_alpha, ftl, fel, fbl, lmax_qlm)
+n1_op = n1lib.get_n1('x_p', 'p', cls_unl["pp"], ftl, fel, fbl, lmax_qlm)
+n1_oa = n1lib.get_n1('x_p', 'a', cls_alpha, ftl, fel, fbl, lmax_qlm)
+n1_oo = n1lib.get_n1('x_p', 'x', cls_unl["oo"], ftl, fel, fbl, lmax_qlm)
+r_gg_fid, r_cc_fid = qresp.get_response(qe_key, lmax_cmb, "p", cls_len, cls_grad, fals, lmax_qlm = lmax_qlm)[0:2]
+n1_op *= utils.cli(r_cc_fid**2)
+n1_oa *= utils.cli(r_cc_fid**2)
+n1_oo *= utils.cli(r_cc_fid**2)
+
+if mpi.rank == 0:
+    np.savetxt("n1_op_QE.txt", n1_op)
+    np.savetxt("n1_oa_QE.txt", n1_oa)
+    np.savetxt("n1_oo_QE.txt", n1_oo)
+
+
+dir = opj(os.environ['HOME'], 'jointmap', 'scripts', "s4data/") 
+it = 10
+fal, dat_delcls, cls_w, cls_f = np.load(f"{dir}fal_{it}.npy", allow_pickle=True).take(0), np.load(f"{dir}dat_delcls_{it}.npy", allow_pickle=True).take(0), np.load(f"{dir}cls_w_{it}.npy", allow_pickle=True).take(0), np.load(f"{dir}cls_f_{it}.npy", allow_pickle=True).take(0)
+cls_ivfs_arr = utils.cls_dot([fal, dat_delcls, fal])
+cls_ivfs = dict()
+
+fid_delcls_10 = np.load(f"{dir}fid_delcls_{it}.npy", allow_pickle=True)
+
+for i, a in enumerate(['t', 'e', 'b']):
+    for j, b in enumerate(['t', 'e', 'b'][i:]):
+        if np.any(cls_ivfs_arr[i, j + i]):
+            cls_ivfs[a + b] = cls_ivfs_arr[i, j + i]
+
+lib_dir = './n1s_ranks_v2_it'
+#n1lib = n1.library_n1(lib_dir, cls_len['tt'], cls_len['te'], cls_len['ee'], lmaxphi=4500, dL=10, lps=None)
+#n1_aa = n1lib.get_n1('a_p', 'a', cls_alpha, ftl, fel, fbl, lmax_qlm)
+#n1_ap = n1lib.get_n1('a_p', 'p', cls_unl['pp'], ftl, fel, fbl, lmax_qlm)
+#n1_pa = n1lib.get_n1('p_p', 'a', cls_alpha, ftl, fel, fbl, lmax_qlm)
+
+cls_alpha_residual = np.loadtxt(opj(os.environ['HOME'], 'jointmap', 'scripts')+"/cls_alpha_residual.txt")
+
+n1lib = n1.library_n1(lib_dir, cls_w['tt'], cls_w['te'], cls_w['ee'], lmaxphi=4500, dL=10, lps=None)
+n1_op = n1lib.get_n1('x_p', 'p', fid_delcls_10[-1]['pp'], fal["ee"], fal["ee"], fal["bb"], lmax_qlm)
+n1_oa = n1lib.get_n1('x_p', 'a', cls_alpha_residual, fal["ee"], fal["ee"], fal["bb"], lmax_qlm)
+
+roo = qresp.get_response(qe_key, lmax_cmb, "p", cls_w, cls_f, fal, lmax_qlm=lmax_qlm)[1]
+n1_op *= utils.cli(roo ** 2)
+n1_oa *= utils.cli(roo ** 2)
+
+rho_sqd_phi = cls_unl["oo"][:lmax_qlm + 1] * utils.cli(cls_unl["oo"][:lmax_qlm + 1] + utils.cli(roo[:lmax_qlm + 1])) #should be ok even if I ignore some N1
+cls_oo = cls_unl["oo"][:lmax_qlm + 1]
+cls_oo *= (1. - rho_sqd_phi)  # The true residual lensing spec.
+n1_oo = n1lib.get_n1('x_p', 'x', cls_oo, fal["ee"], fal["ee"], fal["bb"], lmax_qlm)
+n1_oo *= utils.cli(roo ** 2)
+
+
+if mpi.rank == 0:
+    np.savetxt("n1_op_itr_10.txt", n1_op)
+    np.savetxt("n1_oa_itr_10.txt", n1_oa)
+    np.savetxt("n1_oo_itr_10.txt", n1_oo)
+
+

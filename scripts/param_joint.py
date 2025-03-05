@@ -466,8 +466,8 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float, sim_rank):
     """
     libdir_iterator = libdir_iterators(k, simidx, version)
     if not os.path.exists(libdir_iterator):
-        if mpi.rank == sim_rank:
-            os.makedirs(libdir_iterator)
+        #if mpi.rank == sim_rank:
+        os.makedirs(libdir_iterator)
     mpi.barrier()
     tr = int(os.environ.get('OMP_NUM_THREADS', cpu_count(logical=False)))
     print("Using %s threads"%tr)
@@ -678,7 +678,7 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float, sim_rank):
         
         #response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "fp": Rfp_unl, "pf": Rpf_unl, "ff": Rff_unl, "ao": Rao_unl, "oa": Roa_unl}
         
-        response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "fp": Rfp_unl, "pf": Rpf_unl, "ff": Rff_unl}
+        response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "fp": Rfp_unl, "pf": Rpf_unl, "ff": Rff_unl}#, "ao": Rao_unl, "oa": Roa_unl}
         #response_dictionary = {"pp": Rpp_unl, "oo": Roo_unl, "aa": Raa_unl, "ff": Rff_unl} #no crosses
     else:
         signal_dictionary = {"pp": cpp, "oo": coo}
@@ -833,8 +833,10 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float, sim_rank):
         stepper = steps.nrstep(lmax_qlm, mmax_qlm, val = step_val)
         
         if joint_module:
-            #stepper = steps.nrstep(lmax_qlm, mmax_qlm, val = step_val, vals = [step_val]*len(Operator.names))
-            stepper = steps.harmonicbump(lmax_qlm, mmax_qlm, xa=400, xb=1500, a = 0.5, b = 0.1, scale = 50)
+            vals = [step_val]*len(Operator.names)
+            vals = [0.5, 0.5, 0.5, 0.5]
+            stepper = steps.nrstep(lmax_qlm, mmax_qlm, val = step_val, vals = vals)
+            #stepper = steps.harmonicbump(lmax_qlm, mmax_qlm, xa=400, xb=1500, a = 0.5, b = 0.1, scale = 50)
             
             iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,
                 plm0, plm0 * 0, Rpp_unl, cpp, cls_unl, filtr, k_geom, chain_descrs(lmax_unl, cg_tol), stepper
@@ -873,7 +875,7 @@ if __name__ == '__main__':
         print("Caching things in " + TEMP)
 
     if args.do_mf:
-        Nmf = 2
+        Nmf = 50
         mf_indices = np.arange(1000, 1000 + Nmf, 1)
         expanded_jobs = []
         for sim_idx in base_jobs:
@@ -931,7 +933,7 @@ if __name__ == '__main__':
 
                 if Rec.is_iter_done(lib_dir_iterator, i-1):
                     print("Previous iteration is done. Can calculate MF.")
-                    if (args.do_mf) and (i <= args.itmax) and (i > 0):
+                    if (args.do_mf) and (i <= args.itmax) and (i == args.itmax): #(i>0): #(i == args.itmax):
                         mpi.barrier()
                         print("****Starting with mean field****")
                         print(f"Computing mean field {mf_idx} for sim {idx}")
@@ -956,16 +958,16 @@ if __name__ == '__main__':
                         print("**Get N0 sims**")
                         #N0s = 32
                         #N0s = 30
-                        N0s = 30
+                        N0s = 5
                         key = "p"
                         which = "a"
 
                         simset = np.arange(N0s)
-
-                        grads_mf.calc_sims_v3(itlib, simset, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key, idx, lib_dir_iterator, which = which)
-
+                        simset = np.arange(N0s)
+                        for which in ["p", "o", "a"]:
+                            grads_mf.calc_sims_v3(itlib, simset, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key, idx, lib_dir_iterator, which = which)
                         #grads_mf.calc_sims_v3(itlib, simset, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key, idx, lib_dir_iterator, which = "p")
-                        for j in range(N0s):
-                            grads_mf.calc_sims_v2(itlib, j, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key, idx, lib_dir_iterator, which = which)
+                        #for j in range(N0s):
+                        #    grads_mf.calc_sims_v2(itlib, j, i, cls_unl, args.lmax_qlm, args.mmax_qlm, key, idx, lib_dir_iterator, which = which)
 
                 mpi.barrier()

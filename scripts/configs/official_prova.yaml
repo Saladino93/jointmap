@@ -7,6 +7,7 @@ itmax: 15
 imin: 0
 imax: 127
 do_mf: False
+getrdn0: true
 v: "apo_new_official_check_factor_2_vofficial" #should have been disabled :p
 joint_module: true
 cmb_version: "apo_new_v2"

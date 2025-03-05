@@ -5,8 +5,8 @@ title: '$[\widehat{\alpha}\widehat{\phi}]^{D}[\alpha, \phi]$'
 k: "p_p"
 itmax: 5
 imin: 0
-imax: 54
-v: "apospt3g_patchy_mf" #_bump
+imax: 30 #54
+v: "apospt3g_patchy_mf" #_bump"
 joint_module: true
 do_mf: true
 getrdn0: false

@@ -148,8 +148,7 @@ class sims_cmb_len(object):
     """
     def __init__(self, lib_dir, lmax, cls_unl, lib_pha=None, offsets_plm=None, offsets_cmbunl=None,
                  dlmax=1024, nside_lens=4096, facres=0, nbands=8, verbose=True, lmin_dlm = 2, extra_tlm = None, epsilon = 1e-10, 
-                 nocmb = False, zerolensing = False, zerobirefringence = True, zerocurl = True, zerotau = True, 
-                 cases = ["p"], randomize_function = lambda x, idx: x, get_aniso_index = None):
+                 nocmb = False, cases = ["p"], randomize_function = lambda x, idx: x, get_aniso_index = None):
         if not os.path.exists(lib_dir) and mpi.rank == 0:
             os.makedirs(lib_dir)
         mpi.barrier()
@@ -241,13 +240,17 @@ class sims_cmb_len(object):
 
     def get_sim_plm(self, idx):
         index = self.offset_index(idx, self.offset_plm[0], self.offset_plm[1])
+        pfname = os.path.join(self.lib_dir, 'sim_%04d_plm.fits' % index)
         try:
-            pfname = os.path.join(self.lib_dir, 'sim_%04d_plm.fits' % index)
             plm = hp.read_alm(pfname)*(1-self.zerolensing)
-            print("Getting plm sim from cache", flush = True)
             return plm
         except:
-            result = self.unlcmbs.get_sim_plm(index)*(1-self.zerolensing)
+            if self.extra_tlm is not None:
+                print("Getting plm sim from extra tlm", flush = True)
+                result = self.extra_tlm(index, "plm")
+                print("Done!!!", flush = True)
+            else:
+                result = self.unlcmbs.get_sim_plm(index)*(1-self.zerolensing)
             hp.write_alm(pfname, result)
             return result
         
@@ -452,17 +455,20 @@ class sims_cmb_len(object):
 
 
         if (self.extra_tlm is not None):
-            extrafname = os.path.join(self.lib_dir, f'sim_{idx:04}_{self.extra_tlm.get_name()}lm.fits')
-            if (not os.path.exists(extrafname)):
-                extra_tlm = utils.alm_copy(self.extra_tlm(idx), lmax=self.lmax)
-                hp.write_alm(extrafname, extra_tlm)
+            nome = self.extra_tlm.get_name()
+            if nome != "":
+                extrafname = os.path.join(self.lib_dir, f'sim_{idx:04}_{self.extra_tlm.get_name()}lm.fits')
+                if (not os.path.exists(extrafname)):
+                    extra_tlm = utils.alm_copy(self.extra_tlm(idx), lmax=self.lmax)
+                    hp.write_alm(extrafname, extra_tlm)
 
         total = hp.read_alm(fname)*(1-self.nocmb) #if to account or not for CMB contribution
-        #print("CMB contribution is", total)
+        #print("CMB contribution is", totapfnamel)
 
         if self.extra_tlm is not None:
             #print('NOTE: adding extra tlm', flush = True)
-            total += hp.read_alm(extrafname)
+            if nome != "":
+                total += hp.read_alm(extrafname)
 
         return self.randomize_function(total, idx)
 

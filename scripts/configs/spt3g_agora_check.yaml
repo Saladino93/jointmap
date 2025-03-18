@@ -1,0 +1,40 @@
+#This file has full set of effects in the observed CMB
+#but it only reconstructs the rotation and lensing effects.
+#the rotation effect is disabled as an operator
+name: spt
+config_cmb: "/users/odarwish/iterativefg/scripts/configs/cmb_spt3g.yaml"
+fgcase: "sum"
+depr_cases: []
+randomize: false
+title: '$[\widehat{\alpha}\widehat{\phi}]^{D}[\alpha, \phi]$'
+k: "ptt"
+itmax: 5
+imin: 0
+imax: 1
+Lmin: 2
+v: "p_check_spt3gsumfgpower"
+cmb_version: "p_agora3NGsum"
+joint_module: false
+do_mf: false
+getrdn0: false
+selected: ["p"] #ad would give a but disabled.
+cmbchain: ["p"]
+tol: 5
+beam: 1.4
+nlev_t: 1.6
+lmax_ivf: 3500
+mmax_ivf: 3500
+lmin_tlm: 100
+lmin_elm: 30
+lmin_blm: 30
+lmax_unl: 4000
+mmax_unl: 4000
+lmax_qlm: 4000
+mmax_qlm: 4000
+#no_tau: true
+#no_curl: true
+# Binning parameters
+binning:
+  lmin: 20
+  lmax: 4000
+  delta: 40

@@ -193,10 +193,11 @@ joint_module = args.joint_module
 if joint_module:
     from delensalot.core.opfilt.MAP_opfilt_iso_p_general import alm_filter_nlev_wl
     from delensalot.core.secondaries import secondaries
-    from delensalot.core.opfilt.MAP_opfilt_iso_t_general import alm_filter_nlev_wl as alm_filter_nlev_wl_t
+    from delensalot.core.opfilt.MAP_opfilt_iso_t_general import alm_filter_nlev_wl as alm_filter_nlev_wl_t, _extend_cl
     from delensalot.core.secondaries import secondaries_t
     from delensalot.core.iterator.cs_iterator_operator import iterator_cstmf as iterator_cstmf
 else:
+    from delensalot.core.secondaries import secondaries_t
     from delensalot.core.opfilt.MAP_opfilt_iso_t import alm_filter_nlev_wl as alm_filter_nlev_wl_t
     from delensalot.core.opfilt.MAP_opfilt_iso_p import alm_filter_nlev_wl
     from delensalot.core.opfilt.MAP_opfilt_iso_tp import alm_filter_nlev_wl as alm_filter_nlev_wl_tp
@@ -785,11 +786,17 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
         noise_ilc_spectrum = (transf_tlm>0)*nlev_t**2 + fgpow*fg_power*transf_tlm**2*constant
         effective_noise = np.sqrt(noise_ilc_spectrum)
 
-        np.savetxt("effective_noise.txt", np.c_[(transf_tlm>0)*nlev_t**2, fg_power*transf_tlm**2*constant, effective_noise])
+        #np.savetxt("effective_noise.txt", np.c_[(transf_tlm>0)*nlev_t**2, fg_power*transf_tlm**2*constant, effective_noise])
         
         nlev_t_extended = (transf_tlm_extended>0)*nlev_t**2 + fgpow*fg_power_extended*transf_tlm_extended**2*constant
         effective_noise_extended = np.sqrt(nlev_t_extended)
 
+
+        tlm = sims_MAP.get_sim_tmap(int(simidx))
+        datmaps = alm_copy(tlm, None, lmax_ivf, mmax_ivf)
+        if args.realspace:
+            datmaps = ninv_geom.synthesis(datmaps, spin = 0, lmax = lmax_ivf, mmax = mmax_ivf, nthreads = tr).squeeze()
+        del tlm
 
         if joint_module:
             LensingOp = secondaries_t.Lensing(name = "p", lmax = ffi.lmax_dlm, mmax = ffi.mmax_dlm, sht_tr = tr, disable = disable_function("p"))
@@ -800,18 +807,34 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
             ignore_calling = ["o"] if (("p" in selected) and ("o" in selected)) else [] 
 
+            pixel_area_sr = hp.nside2pixarea(nside)
+            sr_to_arcmin2 = (180*60/np.pi)**2
+            pixel_area_arcmin2 = pixel_area_sr * sr_to_arcmin2
+
+            npix = ninv_geom.npix()
+            tot_area = 4*np.pi
+            pix_area = tot_area/npix
+            pixel_area_arcmin2 = pix_area * sr_to_arcmin2
+
+            mask = np.ones(npix)
+            ninv_t = np.array(mask*pixel_area_arcmin2 / nlev_t ** 2) if args.realspace else None
+            inoise = cli(effective_noise ** 2) * (180 * 60 / np.pi) ** 2 * (_extend_cl(transf_tlm ** 2, lmax_ivf)>0) if not args.realspace else None
+
+            noise_operator = secondaries_t.NoiseOperator("n", lmax_ivf, mmax_ivf, tr, disable = disable_function("n"), geom = ninv_geom, transf = transf_tlm, inoise = inoise, n_inv = ninv_t, lognormal = args.lognormalnoise)
+            templ = ninv_geom.synthesis(plm0, spin = 0, lmax = lmax_qlm, mmax = mmax_qlm, nthreads = tr).squeeze()
+            noise_operator.set_field(np.zeros_like(templ))
+            del templ
             Operator = secondaries_t.OperatorsT([operators_dictionary[oper] for oper in selected], ignore_calling = ignore_calling)
 
             print("Operators are", Operator.names)
             
 
             filtr = alm_filter_nlev_wl_t(ninv_geom, effective_noise, transf_tlm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf), operators = Operator, nlev_t_extended = effective_noise_extended, transf_extended = transf_tlm_extended)
+            filtr.noise_operator = noise_operator
+
         else:
             filtr = alm_filter_nlev_wl_t(effective_noise, ffi, transf_tlm, (lmax_unl, mmax_unl), (lmax_ivf, mmax_ivf), nlev_t_extended = effective_noise_extended, transf_extended = transf_tlm_extended)
 
-        tlm = sims_MAP.get_sim_tmap(int(simidx))
-        datmaps = alm_copy(tlm, None, lmax_ivf, mmax_ivf)
-        del tlm
         wflm0 = lambda: alm_copy(ivfs_walpha.get_sim_tmliklm(simidx), None, lmax_unl, mmax_unl)
     else:
         assert 0
@@ -831,9 +854,10 @@ def get_itlib(k:str, simidx:int, version:str, cg_tol:float):
 
         stepper = steps.nrstep(lmax_qlm, mmax_qlm, val = step_val, vals = [step_val]*len(Operator.names)) if (stepper_chosen == "") else  steps.harmonicbump(lmax_qlm, mmax_qlm, xa=400, xb=1500, a = 0.5, b = 0.1, scale = 50)
 
+        Nmf = args.Nmf
         iterator = iterator_cstmf(libdir_iterator, 'p', (lmax_qlm, mmax_qlm), datmaps,
             plm0, plm0 * 0, Rpp_unl, cpp, cls_unl, filtr, k_geom, chain_descrs(lmax_unl, cg_tol), stepper,
-            wflm0 = wflm0, pp_h0s_matrix = pp_h0s_matrix, inv_signal_matrix = inv_signal_matrix, sims_lib = sims_walpha)
+            wflm0 = wflm0, pp_h0s_matrix = pp_h0s_matrix, inv_signal_matrix = inv_signal_matrix, sims_lib = sims_walpha, Nmf = Nmf)
 
     else:
         print("RUNNING STANDARD LENSING RECONSTRUCTION")
@@ -867,8 +891,7 @@ if __name__ == '__main__':
         print("Caching things in " + TEMP)
 
     if args.do_mf:
-        Nmf = 2
-        mf_indices = np.arange(1000, 1000 + Nmf, 1)
+        mf_indices = np.arange(1000, 1000 + args.Nmf, 1)
         expanded_jobs = []
         for sim_idx in base_jobs:
             # Add mean field jobs for this simulation
